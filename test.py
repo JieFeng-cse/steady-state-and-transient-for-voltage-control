@@ -537,7 +537,7 @@ def plot_action_selcted(selected=[1,5,9]):
     plt.gcf().subplots_adjust(bottom=0.18)
     for indx,i in enumerate(selected):
         # plot policy
-        N = 40
+        N = 30
         s_array = np.zeros(N,)
         
         a_array_baseline = np.zeros(N,)
@@ -545,10 +545,10 @@ def plot_action_selcted(selected=[1,5,9]):
         
         for j in range(N):
             if ph_num == 1:
-                state = np.array([0.8+0.01*j])
+                state = np.array([0.85+0.01*j])
                 s_array[j] = state
             else:
-                state = np.resize(np.array([0.8+0.01*j]),(3))
+                state = np.resize(np.array([0.85+0.01*j]),(3))
                 s_array[j] = state[0] 
             
             if ph_num == 3: 
@@ -573,7 +573,7 @@ def plot_action_selcted(selected=[1,5,9]):
                 axs[indx].plot(s_array, safe_ddpg_a_array[:,ph_id], label = f'Stable-DDPG-{phases[cnt]}', linewidth=2, color=clr)
     for indx,i in enumerate(selected):
         # plot policy
-        N = 40
+        N = 30
         s_array = np.zeros(N,)
         
         a_array_baseline = np.zeros(N,)
@@ -581,10 +581,10 @@ def plot_action_selcted(selected=[1,5,9]):
         
         for j in range(N):
             if ph_num == 1:
-                state = np.array([0.8+0.01*j])
+                state = np.array([0.85+0.01*j])
                 s_array[j] = state
             else:
-                state = np.resize(np.array([0.8+0.01*j]),(3))
+                state = np.resize(np.array([0.85+0.01*j]),(3))
                 s_array[j] = state[0] 
             
             if ph_num == 3: 
@@ -608,7 +608,7 @@ def plot_action_selcted(selected=[1,5,9]):
                 
     for indx,i in enumerate(selected):
         # plot policy
-        N = 40
+        N = 30
         s_array = np.zeros(N,)
         
         a_array_baseline = np.zeros(N,)
@@ -617,10 +617,10 @@ def plot_action_selcted(selected=[1,5,9]):
         
         for j in range(N):
             if ph_num == 1:
-                state = np.array([0.8+0.01*j])
+                state = np.array([0.85+0.01*j])
                 s_array[j] = state
             else:
-                state = np.resize(np.array([0.8+0.01*j]),(3))
+                state = np.resize(np.array([0.85+0.01*j]),(3))
                 s_array[j] = state[0] 
 
             # action_baseline = (np.maximum(state[0]-1.03, 0)-np.maximum(0.97-state[0], 0)).reshape((1,))*slope
@@ -694,7 +694,7 @@ if __name__ == "__main__":
     # print("test")
     # test_suc_rate('safe-ddpg',step_num=100) #safe-ddpg
     # test_suc_rate('linear',step_num=100)
-    test_suc_rate('ddpg',step_num=100)
+    # test_suc_rate('ddpg',step_num=100)
     # plot_bar_avg(len(injection_bus))
     # plot_bar(len(injection_bus))
     # test_suc_rate('linear')
@@ -703,6 +703,6 @@ if __name__ == "__main__":
     # plot_traj_123(19)
     # plot_action_selcted([1,4,9]) #13b3p
     # plot_action_selcted([2,4,10]) #13b3p
-    # plot_action_selcted([2,5,8]) #123b
+    plot_action_selcted([2,5,8]) #123b
     # plot_action_selcted([0,1,2])
     # plot_traj()

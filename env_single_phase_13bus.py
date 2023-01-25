@@ -177,7 +177,7 @@ class IEEE13bus(gym.Env):
     def reset(self, seed=1): #sample different initial volateg conditions during training
         np.random.seed(seed)
         senario = np.random.choice([0,1])
-        # senario = 1
+        # senario = 0
         if(senario == 0):#low voltage 
            # Low voltage
             self.network.sgen['p_mw'] = 0.0
@@ -208,10 +208,10 @@ class IEEE13bus(gym.Env):
             # # self.network.sgen.at[2, 'p_mw'] = np.random.uniform(1, 5)
 
             # self.network.sgen.at[3, 'q_mvar'] = 0.3*np.random.uniform(0, 0.2)
-            self.network.sgen.at[3, 'p_mw'] = 0.3*np.random.uniform(0, 0.2)
-            self.network.sgen.at[4, 'p_mw'] = 0.5*np.random.uniform(2, 3)
+            self.network.sgen.at[3, 'p_mw'] = 0.6*np.random.uniform(0, 2)
+            self.network.sgen.at[4, 'p_mw'] = 0.6*np.random.uniform(2, 3)
             # self.network.sgen.at[5, 'q_mvar'] = 0.4*np.random.uniform(0, 10)
-            self.network.sgen.at[3, 'p_mw'] = 0.3*np.random.uniform(0, 0.2)
+            self.network.sgen.at[5, 'p_mw'] = 0.7*np.random.uniform(0, 2)
             
             self.network.sgen.at[10, 'p_mw'] = np.random.uniform(0.2, 3)
             self.network.sgen.at[11, 'p_mw'] = np.random.uniform(0, 1.5)
@@ -258,22 +258,34 @@ def create_13bus():
     pp_net.sgen['p_mw'] = 0.0
     pp_net.sgen['q_mvar'] = 0.0
 
-    pp.create_sgen(pp_net, 2, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 2, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
 
+    # pp.create_sgen(pp_net, 1, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 3, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 4, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 6, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 8, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 10, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 11, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 12, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 1, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 2, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 3, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 4, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 6, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 8, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 6, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 10, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 11, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 12, p_mw = 0, q_mvar=0)
     
-    # In the original IEEE 13 bus system, there is no load in bus 3, 7, 8. 
-    # Add the load to corresponding node for dimension alignment in RL training
+    # # In the original IEEE 13 bus system, there is no load in bus 3, 7, 8. 
+    # # Add the load to corresponding node for dimension alignment in RL training
     pp.create_load(pp_net, 3, p_mw = 0, q_mvar=0)
     pp.create_load(pp_net, 7, p_mw = 0, q_mvar=0)
     pp.create_load(pp_net, 8, p_mw = 0, q_mvar=0)
