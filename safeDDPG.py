@@ -69,9 +69,9 @@ class DDPG:
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
-        #CINN
-        for Wz in self.policy_net.icnn.Wzs:
-            Wz.weight.data = torch.clamp(Wz.weight.data, 0, np.inf)
+        # #CINN
+        # for Wz in self.policy_net.icnn.Wzs:
+        #     Wz.weight.data = torch.clamp(Wz.weight.data, 0, np.inf)
 
         # print(f'value loss: {value_loss.cpu().detach().numpy():.4f}, policy_loss: {policy_loss.cpu().detach().numpy():.4f}')
 
@@ -221,101 +221,6 @@ class SafePolicyNetwork(nn.Module):
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         action = self.forward(state)
         return action.detach().cpu().numpy()[0] 
-
-# class StablePolicy3phase(nn.Module):
-#     def __init__(self, env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3):
-#         super(StablePolicy3phase, self).__init__()
-#         use_cuda = torch.cuda.is_available()
-#         self.device = torch.device("cuda" if use_cuda else "cpu")
-#         self.env = env
-#         self.hidden_dim = hidden_dim
-#         self.scale = scale
-#         assert action_dim==3, 'action dimension is not 3'
-#         #in this code, we assume the shape of state is batch_size*3
-
-#         #define weight and bias recover matrix
-#         self.w_recover = torch.ones((3*self.hidden_dim,3*self.hidden_dim))
-#         self.w_recover = -torch.triu(self.w_recover,diagonal=0)\
-#             + torch.triu(self.w_recover,diagonal=4)+2*torch.eye(self.hidden_dim*3)\
-#             + torch.triu(self.w_recover,diagonal=1)-torch.triu(self.w_recover,diagonal=3)
-#         self.w_recover = self.w_recover.to(self.device)
-
-#         self.b_recover = torch.zeros((3*self.hidden_dim,3*self.hidden_dim))
-#         tmp = torch.ones((3*self.hidden_dim,3*self.hidden_dim))
-#         for i in range(self.hidden_dim-1):
-#             self.b_recover += torch.triu(tmp,diagonal=3*(i+1))-torch.triu(tmp,diagonal=3*(i+1)+1)
-#         self.b_recover = self.b_recover.to(self.device) #cuda tensor is a new variable
-#         self.select_w = torch.eye(3).repeat(1,self.hidden_dim).to(self.device)
-#         self.select_wneg = -torch.eye(3).repeat(1,self.hidden_dim).to(self.device)
-
-#         #initialization
-#         self.b = torch.rand(self.hidden_dim*3)
-#         self.b = (self.b/torch.sum(self.b))*scale
-#         self.b = torch.nn.Parameter(self.b, requires_grad=True).to(self.device)
-        
-#         self.c = torch.rand(self.hidden_dim*3)
-#         self.c = (self.c/torch.sum(self.c))*scale
-#         self.c = torch.nn.Parameter(self.c, requires_grad=True).to(self.device)
-
-#         self.lambda_pst = torch.nn.Parameter(torch.rand((self.hidden_dim, 6),device=self.device), requires_grad=True)
-#         self.lambda_neg = torch.nn.Parameter(torch.rand((self.hidden_dim, 6),device=self.device), requires_grad=True)
-#     def forward(self, state):
-#         self.w_plus = torch.zeros(3, 3*self.hidden_dim).to(self.device)
-#         for n in range(self.hidden_dim):
-#             nth_dd = torch.zeros(3,3).to(self.device)
-#             id = 0
-#             for i in range(3):
-#                 for j in range(i+1):
-#                     e_i = torch.zeros(3,1).to(self.device)
-#                     e_i[i] = 1
-#                     e_j = torch.zeros(3,1).to(self.device)
-#                     e_j[j] = 1
-#                     if i == j:
-#                         nth_dd += torch.matmul(e_i,torch.transpose(e_i,0,1))*torch.square(self.lambda_pst[n,id])
-#                     else:
-#                         nth_dd += torch.matmul(e_i-e_j,torch.transpose(e_i-e_j,0,1))*torch.square(self.lambda_pst[n,id])
-#                     id += 1
-#             self.w_plus[:,n*3:(n+1)*3]=nth_dd
-
-#         self.w_plus = torch.matmul(self.w_plus, self.w_recover)
-#         # self.w_minus = torch.matmul(-self.w_plus, self.w_recover) #3*3hidden
-#         self.w_minus = -self.w_plus
-#         # print(self.w_plus[:,0:3]+self.w_plus[:,3:6])
-#         # exit(0)
-
-#         b = self.b.data
-#         b = b.clamp(min=0)
-#         b = self.scale*b/torch.norm(b, 1)
-#         self.b.data = b
-
-#         self.b_plus=torch.matmul(-self.b, self.b_recover) - torch.tensor(self.env.vmax-0.02) #shape: 3*hidden_size
-#         self.b_minus=torch.matmul(-self.b, self.b_recover) + torch.tensor(self.env.vmin+0.02)
-
-#         self.nonlinear_plus = torch.matmul(F.relu(torch.matmul(state, self.select_w)
-#                                                   + self.b_plus.view(1, self.hidden_dim*3)),
-#                                            torch.transpose(self.w_plus, 0, 1))
-
-#         self.nonlinear_minus = torch.matmul(F.relu(torch.matmul(state, self.select_wneg)
-#                                                    + self.b_minus.view(1, self.hidden_dim*3)),
-#                                             torch.transpose(self.w_minus, 0, 1))
-#         x = (self.nonlinear_plus+self.nonlinear_minus) 
-        
-#         return x
-    
-#     def get_action(self, state):
-#         state = torch.FloatTensor(state).to(self.device)
-#         action = self.forward(state)
-#         # x = state
-#         # x.requires_grad = True
-#         # action_jb = self.forward(x)
-#         # jacob = torch.zeros(state.shape[1], state.shape[1]) 
-#         # for j in range(3):
-#         #     output = torch.zeros(1,state.shape[1]).to(self.device)
-#         #     output[0,j]=1
-#         #     jacob[j,:]=torch.autograd.grad(action_jb, x, grad_outputs=output, retain_graph=True)[0]  
-#         # print(jacob)
-#         # exit(0)
-#         return action.detach().cpu().numpy()[0]
 
 class StablePolicy3phase(nn.Module):
     def __init__(self, env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3):

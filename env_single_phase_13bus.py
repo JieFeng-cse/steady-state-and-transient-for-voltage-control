@@ -68,18 +68,7 @@ class IEEE13bus(gym.Env):
         # local reward
         agent_num = len(self.injection_bus)
         reward_sep = np.zeros(agent_num, )
-        #just for ddpg
-        # for i in range(agent_num):
-        #     # reward_sep[i] = float(-10*LA.norm(p_action[i])**2 -1000*LA.norm(np.clip(self.state[i]-self.vmax, 0, np.inf))**2
-        #     #                - 1000*LA.norm(np.clip(self.vmin-self.state[i], 0, np.inf))**2) 
-        # # for i in range(agent_num):
-        #     reward_sep[i] = float(-0*LA.norm(p_action[i])**2 -100*LA.norm(np.clip(self.state[i]-self.vmax, 0, np.inf))**2 
-        #                    - 100*LA.norm(np.clip(self.vmin-self.state[i], 0, np.inf))**2 )              
-        # for i in range(agent_num):
-        #     if self.state[i]<0.95:
-        #         reward_sep[i] = float(-20*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],1)) 
-        #     elif self.state[i]>1.05:
-        #         reward_sep[i] = float(-10*LA.norm(p_action[i],1) -115*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],1)) 
+
         for i in range(agent_num):
             if (self.state[i]>1.0 and self.state[i]<1.05):
                 reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.state[i]-self.vmax, -np.inf, 0)],2)**2)   
@@ -203,10 +192,6 @@ class IEEE13bus(gym.Env):
             self.network.sgen.at[1, 'p_mw'] = np.random.uniform(0, 4.51)
             self.network.sgen.at[2, 'p_mw'] = np.random.uniform(0, 5)
 
-            # # self.network.sgen.at[0, 'p_mw'] = np.random.uniform(5, 11)
-            # # self.network.sgen.at[1, 'p_mw'] = np.random.uniform(2, 4.5)
-            # # self.network.sgen.at[2, 'p_mw'] = np.random.uniform(1, 5)
-
             # self.network.sgen.at[3, 'q_mvar'] = 0.3*np.random.uniform(0, 0.2)
             self.network.sgen.at[3, 'p_mw'] = 0.6*np.random.uniform(0, 2)
             self.network.sgen.at[4, 'p_mw'] = 0.6*np.random.uniform(2, 3)
@@ -258,31 +243,31 @@ def create_13bus():
     pp_net.sgen['p_mw'] = 0.0
     pp_net.sgen['q_mvar'] = 0.0
 
-    # pp.create_sgen(pp_net, 2, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
-
-    # pp.create_sgen(pp_net, 1, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 3, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 4, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 6, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 8, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 10, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 11, p_mw = 0, q_mvar=0)
-    # pp.create_sgen(pp_net, 12, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 1, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 2, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
+
+    pp.create_sgen(pp_net, 1, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 3, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 4, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 8, p_mw = 0, q_mvar=0)
-    pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 6, p_mw = 0, q_mvar=0)
+    pp.create_sgen(pp_net, 8, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 10, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 11, p_mw = 0, q_mvar=0)
     pp.create_sgen(pp_net, 12, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 1, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 2, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 5, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 3, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 4, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 7, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 8, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 9, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 6, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 10, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 11, p_mw = 0, q_mvar=0)
+    # pp.create_sgen(pp_net, 12, p_mw = 0, q_mvar=0)
     
     # # In the original IEEE 13 bus system, there is no load in bus 3, 7, 8. 
     # # Add the load to corresponding node for dimension alignment in RL training
@@ -294,12 +279,8 @@ def create_13bus():
 
 if __name__ == "__main__":
     net = create_13bus()
-    # print(net.sgen)
-    # print(net.line)
-    # print(net.trafo)
-    # print(net.bus)
-    # injection_bus = np.array([2, 7, 9])
-    injection_bus = np.array([1,2,3,4,5,6, 7, 8,9,10,11,12])
+    injection_bus = np.array([2, 7, 9])
+    # injection_bus = np.array([1,2,3,4,5,6, 7, 8,9,10,11,12])
     env = IEEE13bus(net, injection_bus)
     # print(env.reset0())
     # for i in range(7):
@@ -310,8 +291,8 @@ if __name__ == "__main__":
         state = env.reset(i)
         state_list.append(state)
     state_list = np.array(state_list)
-    fig, axs = plt.subplots(1, 12, figsize=(15,3))
-    for i in range(12):
+    fig, axs = plt.subplots(1, 3, figsize=(6,3))
+    for i in range(3):
         axs[i].hist(state_list[:,i])
     plt.show()
     

@@ -43,26 +43,16 @@ args = parser.parse_args()
 seed = 10
 torch.manual_seed(seed)
 
-# plot policy
-def plot_policy(agent_list, episode):
-    s_array = np.zeros(30,)
-
-    a_array_baseline = np.zeros(30,)
-    a_array = np.zeros(30,)
-    for i in range(30):
-        state = torch.tensor([0.85+0.01*i])
-        s_array[i] = state
-
-        action_baseline = -(np.maximum(state-1.05, 0)-np.maximum(0.95-state, 0)).reshape((1,))
-        action = -agent_list[3].policy_net(state.reshape(1,1))
-
-        a_array_baseline[i] = action_baseline[0]
-        a_array[i] = action[0]
-        
-    plt.figure() 
-    plt.plot(s_array, a_array_baseline, label = 'Baseline')
-    plt.plot(s_array, a_array, label = 'RL')
-    plt.savefig('Policy{0}.png'.format(episode), dpi=100)
+# Safe flow method for single phase
+def safe_flow(Q,action,alpha,limit,agent_num):
+    #this version only works for single phase case
+    solution = np.zeros_like(Q)
+    for i in range(agent_num):
+        if action[i]<0:
+            action[i]=np.maximum(alpha*(limit[i,0]-Q[i]),action[i])
+        elif action[i]>0:
+            action[i]=np.minimum(alpha*(limit[i,1]-Q[i]),action[i])
+    return action
 
 """
 Create Agent list and replay buffer
@@ -90,13 +80,7 @@ if args.env_name == '123bus':
     num_agent = 14
     if args.algorithm == 'safe-ddpg':
         plr = 1.5e-4
-if args.env_name == 'eu-lv':
-    max_ac = 0.005
-    pp_net = create_eu_lv()
-    injection_bus = np.array([171,133,378])
-    env = Three_Phase_EU(pp_net, injection_bus)
-    num_agent = len(injection_bus)
-    ph_num=3
+
 if args.env_name == '13bus3p':
     # injection_bus = np.array([675,633,680])
     injection_bus = np.array([633,634,671,645,646,692,675,611,652,632,680,684])
@@ -134,15 +118,9 @@ for i in range(num_agent):
     elif args.algorithm == 'safe-ddpg-convex':
         policy_net = convex_monotone_network(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
         target_policy_net = convex_monotone_network(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
-    # elif args.algorithm == 'safe-ddpg' and ph_num == 3 and args.safe_type == 'loss':
-    #     policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
-    #     target_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     elif args.algorithm == 'safe-ddpg' and ph_num == 3 and args.safe_type == 'three_single':
         policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
         target_policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
-    # elif args.algorithm == 'safe-ddpg' and ph_num == 3 and args.safe_type == 'dd':
-    #     policy_net = StablePolicy3phase(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
-    #     target_policy_net = StablePolicy3phase(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     elif args.algorithm == 'linear':
         policy_net = LinearPolicy(env,ph_num)
         target_policy_net = LinearPolicy(env,ph_num)
@@ -242,13 +220,9 @@ elif (FLAG ==1):
     batch_size = 256
 
     # if/not plot trained policy every # episodes
-    plot = False
     rewards = []
     avg_reward_list = []
     for episode in range(num_episodes):
-        if(episode%50==0 and plot == True):
-            plot_policy(agent_list, episode)
-
         state = env.reset(seed = episode)
         episode_reward = 0
         last_action = np.zeros((num_agent,ph_num)) #if single phase, 1, else ,3
