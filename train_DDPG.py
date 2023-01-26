@@ -38,6 +38,9 @@ parser.add_argument('--env_name', default="13bus",
 parser.add_argument('--algorithm', default='safe-ddpg', help='name of algorithm')
 parser.add_argument('--status', default='train')
 parser.add_argument('--safe_type', default='three_single') #loss, dd
+parser.add_argument('--safe_method', default='safe-flow') 
+parser.add_argument('--use_safe_flow', default=True) 
+parser.add_argument('--use_gradient', default=True) 
 args = parser.parse_args()
 seed = 10
 torch.manual_seed(seed)
@@ -49,28 +52,32 @@ vlr = 2e-4
 plr = 1e-4
 ph_num = 1
 max_ac = 0.3
+alpha = 0.7
 if args.env_name == '56bus':
     pp_net = create_56bus()
     injection_bus = np.array([18, 21, 30, 45, 53])-1  
     env = VoltageCtrl_nonlinear(pp_net, injection_bus)
     num_agent = 5
+
 if args.env_name == '13bus':
     pp_net = create_13bus()
     injection_bus = np.array([2, 7, 9])
     # injection_bus = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
     env = IEEE13bus(pp_net, injection_bus)
     num_agent = len(injection_bus)
-    Q_limit = np.asarray([[-1.2,1.2],[-1.2,1.0],[-1.3,0.6]])
-    C = np.asarray([0.7,0.5,0.6])*0.15
-    alpha = 0.7
+    Q_limit = np.asarray([[-1.0,1.0],[-1.0,0.8],[-1.0,0.6]])
+    C = np.asarray([0.7,0.5,0.6])*0.15    
+
 if args.env_name == '123bus':
     max_ac = 0.8
     pp_net = create_123bus()
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
     env = IEEE123bus(pp_net, injection_bus)
     num_agent = 14
-    if args.algorithm == 'safe-ddpg':
-        plr = 1.5e-4
+    Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
+    C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
+    # if args.algorithm == 'safe-ddpg':
+    #     plr = 1.5e-4
 
 if args.env_name == '13bus3p':
     # injection_bus = np.array([675,633,680])
@@ -105,21 +112,28 @@ for i in range(num_agent):
     value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     if args.algorithm == 'safe-ddpg' and not ph_num == 3:
         policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
-            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
         target_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
-            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
-    elif args.algorithm == 'safe-ddpg-convex':
-        policy_net = convex_monotone_network(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
-        target_policy_net = convex_monotone_network(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
     elif args.algorithm == 'safe-ddpg' and ph_num == 3 and args.safe_type == 'three_single':
         policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
         target_policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
     elif args.algorithm == 'linear':
-        policy_net = LinearPolicy(env,ph_num)
-        target_policy_net = LinearPolicy(env,ph_num)
+        policy_net = LinearPolicy(env=env, ph_num=ph_num, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+        target_policy_net = LinearPolicy(env=env, ph_num=ph_num, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
     else:
-        policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
-        target_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
+        policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+        target_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
 
     target_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     
@@ -196,7 +210,7 @@ elif (FLAG ==1):
         # num_episodes = 700
     else:
         # num_episodes = 700 #123 2000 13-3p 700
-        num_episodes = 700
+        num_episodes = 2000 #13 300
 
     # trajetory length each episode
     num_steps = 30  
@@ -290,36 +304,20 @@ elif (FLAG ==1):
         if(episode%50==0):
             print("Episode * {} * Avg Reward is ==> {}".format(episode, avg_reward))
         avg_reward_list.append(avg_reward)
-    # for i in range(num_agent):
-    #     if ph_num == 3 and args.algorithm=='safe-ddpg':
-    #         pth_value = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type}/value_net_checkpoint_a{i}.pth'
-    #         pth_policy = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type}/policy_net_checkpoint_a{i}.pth'
-    #     else:
-    #         pth_value = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/value_net_checkpoint_a{i}.pth'
-    #         pth_policy = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/policy_net_checkpoint_a{i}.pth'
-    #     torch.save(agent_list[i].value_net.state_dict(), pth_value)
-    #     torch.save(agent_list[i].policy_net.state_dict(), pth_policy)
+    for i in range(num_agent):
+        if ph_num == 3 and args.algorithm=='safe-ddpg':
+            pth_value = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type}/value_net_checkpoint_a{i}.pth'
+            pth_policy = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type}/policy_net_checkpoint_a{i}.pth'
+        else:
+            pth_value = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_method}_value_net_checkpoint_a{i}.pth'
+            pth_policy = f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_method}_policy_net_checkpoint_a{i}.pth'
+        torch.save(agent_list[i].value_net.state_dict(), pth_value)
+        torch.save(agent_list[i].policy_net.state_dict(), pth_policy)
 
 else:
     raise ValueError("Model loading optition does not exist!")
 # torch.save(torch.tensor(rewards),'rewards_ddpg_q1.pt')
 # print(torch.tensor(rewards).shape)
-
-if args.status == 'train':
-    check_buffer = replay_buffer_list[0]
-    buffer_len = replay_buffer_list[0].__len__()
-    state, action, last_action, reward, next_state, done = replay_buffer_list[0].sample(buffer_len-1)
-    if ph_num==1:
-        plt.scatter(action,reward)
-        plt.title('bus 0')
-        plt.savefig('bus0.png')
-        plt.show()
-    else:
-        plt.scatter(action[:,0],reward)
-        plt.title('bus 0')
-        plt.savefig('bus0.png')
-        plt.show()
-
 
 fig, axs = plt.subplots(1, num_agent, figsize=(15,3))
 for i in range(num_agent):
@@ -349,7 +347,7 @@ for i in range(num_agent):
                 action[id[p]]=action_tmp[p]
         else:
             action = agent_list[i].policy_net.get_action(np.asarray([state]),np.zeros_like([state])) 
-        action = np.clip(action, -max_ac, max_ac) 
+        # action = np.clip(action, -max_ac, max_ac) 
         a_array_baseline[j] = -action_baseline[0]
         a_array[j] = action
     axs[i].plot(s_array, 2*a_array_baseline, '-.', label = 'Linear')

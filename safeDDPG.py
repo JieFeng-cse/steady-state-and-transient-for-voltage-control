@@ -149,6 +149,7 @@ class DDPG:
 class SafePolicyNetwork(nn.Module):
     def __init__(self, env, obs_dim, action_dim, hidden_dim,\
         up=1.0,low=-1.0, alpha=0.6, node_cost = 0.1,\
+            use_gradient=True, safe_flow = True,\
             scale = 0.15, init_w=3e-3):
         super(SafePolicyNetwork, self).__init__()
         use_cuda = torch.cuda.is_available()
@@ -163,6 +164,8 @@ class SafePolicyNetwork(nn.Module):
         self.lower_bound_Q = low
         self.alpha = alpha
         self.node_cost = node_cost
+        self.use_gradient = use_gradient
+        self.use_safe_flow = safe_flow
         
         #define weight and bias recover matrix
         self.w_recover = torch.ones((self.hidden_dim, self.hidden_dim))
@@ -215,20 +218,28 @@ class SafePolicyNetwork(nn.Module):
         self.nonlinear_minus = torch.matmul(F.relu(torch.matmul(state, self.select_wneg)
                                                    + self.b_minus.view(1, self.hidden_dim)),
                                             torch.transpose(self.w_minus, 0, 1))
-        # for high voltage scenario, the reactive power injection is negative
-        x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
-            (torch.ones_like(last_action))*(self.lower_bound_Q-last_action)*0.98*self.alpha
-        # for low voltage scenario, the reactive power injection is positive
-        x_low_voltage = -torch.tanh(self.nonlinear_minus)*\
-            (torch.ones_like(last_action))*(self.upper_bound_Q-last_action)*0.98*self.alpha
+        if self.use_safe_flow:
+            # for high voltage scenario, the reactive power injection is negative
+            x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
+                (torch.ones_like(last_action)*self.lower_bound_Q-last_action)*0.98*self.alpha
+            # for low voltage scenario, the reactive power injection is positive
+            x_low_voltage = -torch.tanh(self.nonlinear_minus)*\
+                (torch.ones_like(last_action)*self.upper_bound_Q-last_action)*0.98*self.alpha
+        else:
+            x_high_voltage = self.nonlinear_plus
+            x_low_voltage = self.nonlinear_minus
 
         # x = (self.nonlinear_plus+self.nonlinear_minus) #previous version
         gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
+        if not self.use_gradient:
+            gradient = 0
+
         x = x_high_voltage + x_low_voltage
         x_tmp = x.clone()
         x_tmp -= gradient
-        x_tmp = self.safe_flow(x_tmp, last_action)
-        difference = x_tmp - x
+        if self.use_safe_flow:
+            x_tmp = self.safe_flow(x_tmp, last_action)
+        difference = x_tmp - x.clone().detach()
         x = x + difference 
         return x
     
@@ -284,14 +295,23 @@ class SafePolicy3phase(nn.Module):
 
 # standard ddpg policy network
 class PolicyNetwork(nn.Module):
-    def __init__(self, env, obs_dim, action_dim, hidden_dim, up=1, low=-1, init_w=3e-3):
+    def __init__(self, env, obs_dim, action_dim, hidden_dim, \
+        up=1.0,low=-1.0, alpha=0.6, node_cost = 0.1,\
+            use_gradient=True, safe_flow = True,\
+                 init_w=3e-3):
         super(PolicyNetwork, self).__init__()
         use_cuda = torch.cuda.is_available()
         self.device   = torch.device("cuda" if use_cuda else "cpu")
 
-        self.env = env
-        self.lower_bound_Q = low
+        #parameters for safe flow
         self.upper_bound_Q = up
+        self.lower_bound_Q = low
+        self.alpha = alpha
+        self.node_cost = node_cost
+        self.use_gradient = use_gradient
+        self.use_safe_flow = safe_flow
+
+        self.env = env
         self.linear1 = nn.Linear(obs_dim, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         self.linear3 = nn.Linear(hidden_dim, action_dim)
@@ -304,36 +324,91 @@ class PolicyNetwork(nn.Module):
         x = torch.relu(self.linear1(state))
         x = torch.relu(self.linear2(x))
         x = self.linear3(x)
-        return x
 
-    def get_action(self, state):
+        # x = (self.nonlinear_plus+self.nonlinear_minus) #previous version
+        gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
+        if not self.use_gradient:
+            gradient = 0
+        x_tmp = x.clone()
+        x_tmp -= gradient
+        if self.use_safe_flow:
+            x_tmp = self.safe_flow(x_tmp, last_action)
+        difference = x_tmp - x.clone().detach()
+        x = x + difference 
+        return x
+    
+    def safe_flow(self, action,last_Q):
+        action[action<0]=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q[action<0]),action[action<0])
+        action[action>0]=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q[action>0]),action[action>0])
+        return action
+
+    def get_action(self, state, last_action=0):
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        action = self.forward(state)
+        last_action = torch.FloatTensor(last_action).unsqueeze(0).to(self.device)
+        action = self.forward(state,last_action)
         return action.detach().cpu().numpy()[0]
 
 # linear
 class LinearPolicy(nn.Module):
-    def __init__(self, env, ph_num, init_w=3e-3):
+    def __init__(self, env, ph_num,\
+        up=1.0,low=-1.0, alpha=0.6, node_cost = 0.1,\
+            use_gradient=True, safe_flow = True):
         super(LinearPolicy, self).__init__()
         use_cuda = torch.cuda.is_available()
         self.device   = torch.device("cuda" if use_cuda else "cpu")
+
+        #parameters for safe flow
+        self.upper_bound_Q = up
+        self.lower_bound_Q = low
+        self.alpha = alpha
+        self.node_cost = node_cost
+        self.use_gradient = use_gradient
+        self.use_safe_flow = safe_flow
 
         self.env = env
         slope =torch.ones(1, requires_grad=True).to(self.device)
         self.slope = torch.nn.Parameter(slope)
         self.ph_num = ph_num
 
-    def forward(self, state):
+    def forward(self, state, last_action=0):
         state.requires_grad = True
-        # state = state-1
-        # print(state.shape)
-        x = (torch.maximum(state-1.03, torch.zeros_like(state).to(self.device))-torch.maximum(0.97-state, torch.zeros_like(state).to(self.device)))*torch.square(self.slope)
-        return x
+        x_plus = torch.maximum(state-1.03, torch.zeros_like(state).to(self.device))*torch.square(self.slope)
+        x_minus = torch.maximum(0.97-state, torch.zeros_like(state).to(self.device))*torch.square(self.slope)
+        if self.use_safe_flow:
+            # for high voltage scenario, the reactive power injection is negative
+            x_high_voltage  = torch.tanh(x_plus)*\
+                (torch.ones_like(last_action)*self.lower_bound_Q-last_action)*0.98*self.alpha
+            # for low voltage scenario, the reactive power injection is positive
+            x_low_voltage = torch.tanh(x_minus)*\
+                (torch.ones_like(last_action)*self.upper_bound_Q-last_action)*0.98*self.alpha
+        else:
+            x_high_voltage = -x_plus
+            x_low_voltage = x_minus
 
-    def get_action(self, state):
+        # x = (self.nonlinear_plus+self.nonlinear_minus) #previous version
+        gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
+        if not self.use_gradient:
+            gradient = 0
+
+        x = x_high_voltage + x_low_voltage
+        x_tmp = x.clone()
+        x_tmp -= gradient
+        if self.use_safe_flow:
+            x_tmp = self.safe_flow(x_tmp, last_action)
+        difference = x_tmp - x.clone().detach()
+        x = x + difference 
+        return x
+    
+    def safe_flow(self, action,last_Q):
+        action[action<0]=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q[action<0]),action[action<0])
+        action[action>0]=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q[action>0]),action[action>0])
+        return action
+
+    def get_action(self, state, last_action):
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        action = self.forward(state)
-        return action.detach().cpu().numpy()[0]
+        last_action = torch.FloatTensor(last_action).unsqueeze(0).to(self.device)
+        action = self.forward(state, last_action)
+        return action.detach().cpu().numpy()[0] 
 
 
 # value network

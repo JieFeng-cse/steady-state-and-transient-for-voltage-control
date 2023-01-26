@@ -75,9 +75,9 @@ class IEEE13bus(gym.Env):
             elif (self.state[i]>0.95 and self.state[i]<1.0):
                 reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.vmin-self.state[i], -np.inf, 0)],2)**2)   
             elif self.state[i]<0.95:
-                reward_sep[i] = float(-10*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
+                reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
             elif self.state[i]>1.05:
-                reward_sep[i] = float(-10*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
+                reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
         reward = np.sum(reward_sep)
         # state-transition dynamics
         for i in range(len(self.injection_bus)):
@@ -89,8 +89,6 @@ class IEEE13bus(gym.Env):
         
         if(np.min(self.state) > 0.95 and np.max(self.state)< 1.05):
             done = True
-        # if done:
-        #     print('successful!')
         return self.state, reward, reward_sep, done
 
     
@@ -189,7 +187,7 @@ class IEEE13bus(gym.Env):
             # for i in range(len(self.injection_bus)):
             #     self.network.sgen.at[i, 'p_mw'] = 0.5*np.random.uniform(0, 2)
             self.network.sgen.at[0, 'p_mw'] = np.random.uniform(0.5, 4)
-            self.network.sgen.at[1, 'p_mw'] = np.random.uniform(0, 4.51)
+            self.network.sgen.at[1, 'p_mw'] = np.random.uniform(1, 4.51)
             self.network.sgen.at[2, 'p_mw'] = np.random.uniform(0, 5)
 
             # self.network.sgen.at[3, 'q_mvar'] = 0.3*np.random.uniform(0, 0.2)

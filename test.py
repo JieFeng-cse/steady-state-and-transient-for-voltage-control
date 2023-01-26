@@ -1,31 +1,19 @@
 ### import collections
 from cProfile import label
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from numpy import linalg as LA
-import gym
-import os
-import random
-import sys
-from gym import spaces
-from gym.utils import seeding
-import copy
 
 from scipy.io import loadmat
-import pandapower as pp
-import pandapower.networks as pn
-import pandas as pd 
-import math
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import argparse
 
 from environment_single_phase import create_56bus, VoltageCtrl_nonlinear
 from env_single_phase_13bus import IEEE13bus, create_13bus
 from env_single_phase_123bus import IEEE123bus, create_123bus
-from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, ReplayBuffer, ReplayBufferPI, PolicyNetwork, SafePolicy3phase, LinearPolicy
+from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, PolicyNetwork, SafePolicy3phase, LinearPolicy
 from IEEE_13_3p import IEEE13bus3p, create_13bus3p
 
 
@@ -37,6 +25,9 @@ parser.add_argument('--env_name', default="13bus",
                     help='name of the environment to run')
 parser.add_argument('--algorithm', default='safe-ddpg', help='name of algorithm')
 parser.add_argument('--safe_type', default='three_single')
+parser.add_argument('--safe_method', default='safe-flow') 
+parser.add_argument('--use_safe_flow', default=True) 
+parser.add_argument('--use_gradient', default=True) 
 args = parser.parse_args()
 seed = 10
 torch.manual_seed(seed)
@@ -58,6 +49,9 @@ if args.env_name == '13bus':
     injection_bus = np.array([2, 7, 9])
     env = IEEE13bus(pp_net, injection_bus)
     num_agent = 3
+    Q_limit = np.asarray([[-1.0,1.0],[-1.0,0.8],[-1.0,0.6]])
+    C = np.asarray([0.7,0.5,0.6])*0.15
+    alpha = 0.7
 if args.env_name == '123bus':
     pp_net = create_123bus()
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
@@ -92,7 +86,8 @@ linear_agent_list = []
 for i in range(num_agent):
     if not ph_num == 3:
         safe_ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)    
-        safe_ddpg_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
+        safe_ddpg_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
     else:
         if ph_num == 3:
             obs_dim = len(env.injection_bus[env.injection_bus_str[i]])
@@ -101,13 +96,15 @@ for i in range(num_agent):
         safe_ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
     
     ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
-    ddpg_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)    
+    ddpg_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
 
     ddpg_agent = DDPG(policy_net=ddpg_policy_net, value_net=ddpg_value_net,
                  target_policy_net=ddpg_policy_net, target_value_net=ddpg_value_net)
     
     linear_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
-    linear_policy_net = LinearPolicy(env,ph_num).to(device)    
+    linear_policy_net = LinearPolicy(env=env, ph_num=ph_num, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)  
 
     linear_agent = DDPG(policy_net=linear_policy_net, value_net=linear_value_net,
                  target_policy_net=linear_policy_net, target_value_net=linear_value_net)
@@ -120,25 +117,19 @@ for i in range(num_agent):
     linear_agent_list.append(linear_agent)
 
 for i in range(num_agent):
-    # ddpg_valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/ddpg/value_net_checkpoint_a{i}.pth')
-    ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/ddpg/policy_net_checkpoint_a{i}.pth')
-    # ddpg_agent_list[i].value_net.load_state_dict(ddpg_valuenet_dict)
+    ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/ddpg/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
     ddpg_agent_list[i].policy_net.load_state_dict(ddpg_policynet_dict)
 
-    # linear_valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/linear/value_net_checkpoint_a{i}.pth')
-    linear_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/linear/policy_net_checkpoint_a{i}.pth')
+    linear_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/linear/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
     linear_agent_list[i].policy_net.load_state_dict(linear_policynet_dict)
 
     if ph_num == 3:
-        # safe_ddpg_valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/safe-ddpg/{args.safe_type}/value_net_checkpoint_a{i}.pth')
         safe_ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/safe-ddpg/{args.safe_type}/policy_net_checkpoint_a{i}.pth')
-        # safe_ddpg_agent_list[i].value_net.load_state_dict(safe_ddpg_valuenet_dict)
         safe_ddpg_agent_list[i].policy_net.load_state_dict(safe_ddpg_policynet_dict)
     else:
-        # safe_ddpg_valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/safe-ddpg/value_net_checkpoint_a{i}.pth')
-        safe_ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/safe-ddpg/policy_net_checkpoint_a{i}.pth')
-        # safe_ddpg_agent_list[i].value_net.load_state_dict(safe_ddpg_valuenet_dict)
+        safe_ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/safe-ddpg/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
         safe_ddpg_agent_list[i].policy_net.load_state_dict(safe_ddpg_policynet_dict)
+
 def plot_action():
     
     fig, axs = plt.subplots(1, 1, figsize=(16,12))
@@ -201,15 +192,14 @@ def plot_traj():
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]))#+np.random.normal(0, 0.05)
-            action_agent = np.clip(action_agent, -max_ac, max_ac)
+            action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])#+np.random.normal(0, 0.05)
             action.append(action_agent)
 
         # PI policy    
-        action = last_action - np.asarray(action)
+        action = last_action + np.asarray(action)
 
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
-        next_state, reward, reward_sep, done = env.step_Preward(action, (last_action-action))
+        next_state, _, _, done = env.step_Preward(action, (action-last_action))
         if done:
             print("finished")
         action_list.append(action)
@@ -217,8 +207,6 @@ def plot_traj():
         last_action = np.copy(action)
         state = next_state
     fig, axs = plt.subplots(1, 2, figsize=(16,7))
-    # lb = axs[0].plot(range(len(action_list)), [0.95]*len(action_list), linestyle='--', dashes=(5, 10), color='g', label='lower bound')
-    # ub = axs[0].plot(range(len(action_list)), [1.05]*len(action_list), linestyle='--', dashes=(5, 10), color='r', label='upper bound')
     for i in range(num_agent):    
         dps = axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-.', label = f'DDPG at {injection_bus[i]}', linewidth=2)
         dpa = axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], '-.', label = f'DDPG at {injection_bus[i]}', linewidth=2)
@@ -226,7 +214,6 @@ def plot_traj():
         ddpg_a_plt.append(dpa)
 
     state = env.reset()
-    episode_reward = 0
     last_action = np.zeros((num_agent,1))
     action_list=[]
     state_list =[]
@@ -235,16 +222,15 @@ def plot_traj():
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]))#+np.random.normal(0, 0.05)
+            action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])#+np.random.normal(0, 0.05)
             # action_agent = (np.maximum(state[i]-1.05, 0)-np.maximum(0.95-state[i], 0)).reshape((1,))*2
-            action_agent = np.clip(action_agent, -max_ac, max_ac)
             action.append(action_agent)
 
         # PI policy    
-        action = last_action - np.asarray(action)
+        action = last_action + np.asarray(action)
 
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
-        next_state, reward, reward_sep, done = env.step_Preward(action, (last_action-action))
+        next_state, _, _, done = env.step_Preward(action, (last_action-action))
         if done:
             print("finished")
         action_list.append(action)
@@ -703,6 +689,6 @@ if __name__ == "__main__":
     # plot_traj_123(19)
     # plot_action_selcted([1,4,9]) #13b3p
     # plot_action_selcted([2,4,10]) #13b3p
-    plot_action_selcted([2,5,8]) #123b
+    # plot_action_selcted([2,5,8]) #123b
     # plot_action_selcted([0,1,2])
-    # plot_traj()
+    plot_traj()

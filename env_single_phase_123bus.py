@@ -78,17 +78,7 @@ class IEEE123bus(gym.Env):
         # local reward
         agent_num = len(self.injection_bus)
         reward_sep = np.zeros(agent_num, )
-
-        
-        # for i in range(agent_num):
-        #     if (self.state[i]>1.0 and self.state[i]<1.05):
-        #         reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, -np.inf, 0)],1))   
-        #     elif (self.state[i]>0.95 and self.state[i]<1.0):
-        #         reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], -np.inf, 0)],1))   
-        #     else:
-        #         reward_sep[i] = float(-1*LA.norm(p_action[i],1) -200*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],1)
-        #                     - 200*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],1))  
-        # reward = np.sum(reward_sep)         
+     
         for i in range(agent_num):
             if (self.state[i]>1.0 and self.state[i]<1.05):
                 reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.state[i]-self.vmax, -np.inf, 0)],2)**2)   
@@ -103,9 +93,6 @@ class IEEE123bus(gym.Env):
         # state-transition dynamics
         for i in range(len(self.injection_bus)):
             self.network.sgen.at[i, 'q_mvar'] = action[i] 
-        
-        # for i in range(len(self.network.sgen)-len(self.injection_bus)):
-        #     self.network.sgen.at[i+len(self.injection_bus), 'p_mw'] = 0.0
 
         pp.runpp(self.network, algorithm='bfsw', init = 'dc')
         
@@ -113,8 +100,6 @@ class IEEE123bus(gym.Env):
         
         if(np.min(self.state) > 0.95 and np.max(self.state)< 1.05):
             done = True
-        # if done:
-            # print('success')
         
         return self.state, reward, reward_sep, done
 
