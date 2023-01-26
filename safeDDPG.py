@@ -46,7 +46,7 @@ class DDPG:
         reward = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
         done = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
 
-        next_action = action-self.target_policy_net(next_state)    
+        next_action = action+self.target_policy_net(next_state, action)    
         target_value = self.target_value_net(next_state, next_action.detach())
         expected_value = reward + gamma*(1.0-done)*target_value
         
@@ -62,18 +62,13 @@ class DDPG:
         # print(self.policy_net(state))
         # exit(0)
         # policy_loss = self.value_criterion(self.policy_net(state),linear_action)
-        policy_loss = self.value_net(state, last_action-self.policy_net(state)) 
+        policy_loss = self.value_net(state, last_action+self.policy_net(state,last_action)) 
         policy_loss =  -policy_loss.mean()
         # policy_loss =  self.value_criterion(self.policy_net(state),linear_action)
         
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
-        # #CINN
-        # for Wz in self.policy_net.icnn.Wzs:
-        #     Wz.weight.data = torch.clamp(Wz.weight.data, 0, np.inf)
-
-        # print(f'value loss: {value_loss.cpu().detach().numpy():.4f}, policy_loss: {policy_loss.cpu().detach().numpy():.4f}')
 
         for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
             target_param.data.copy_(
@@ -152,14 +147,22 @@ class DDPG:
 
 # monotone policy network with dead-band between [v_min, v_max]
 class SafePolicyNetwork(nn.Module):
-    def __init__(self, env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3):
+    def __init__(self, env, obs_dim, action_dim, hidden_dim,\
+        up=1.0,low=-1.0, alpha=0.6, node_cost = 0.1,\
+            scale = 0.15, init_w=3e-3):
         super(SafePolicyNetwork, self).__init__()
         use_cuda = torch.cuda.is_available()
         self.device   = torch.device("cuda" if use_cuda else "cpu")
 
         self.env = env
         self.hidden_dim = hidden_dim
-        self.scale = scale
+        self.scale = scale        
+        
+        #parameters for safe flow
+        self.upper_bound_Q = up
+        self.lower_bound_Q = low
+        self.alpha = alpha
+        self.node_cost = node_cost
         
         #define weight and bias recover matrix
         self.w_recover = torch.ones((self.hidden_dim, self.hidden_dim))
@@ -186,7 +189,7 @@ class SafePolicyNetwork(nn.Module):
         self.q = torch.nn.Parameter(torch.rand(action_dim, self.hidden_dim), requires_grad=True)
         self.z = torch.nn.Parameter(torch.rand(action_dim, self.hidden_dim), requires_grad=True)
         
-    def forward(self, state):
+    def forward(self, state, last_action):
         self.w_plus=torch.matmul(torch.square(self.q), self.w_recover)
         
         self.w_minus=torch.matmul(-torch.square(self.q), self.w_recover)
@@ -212,94 +215,33 @@ class SafePolicyNetwork(nn.Module):
         self.nonlinear_minus = torch.matmul(F.relu(torch.matmul(state, self.select_wneg)
                                                    + self.b_minus.view(1, self.hidden_dim)),
                                             torch.transpose(self.w_minus, 0, 1))
-        
-        x = (self.nonlinear_plus+self.nonlinear_minus) 
-        
-        return x
+        # for high voltage scenario, the reactive power injection is negative
+        x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
+            (torch.ones_like(last_action))*(self.lower_bound_Q-last_action)*0.98*self.alpha
+        # for low voltage scenario, the reactive power injection is positive
+        x_low_voltage = -torch.tanh(self.nonlinear_minus)*\
+            (torch.ones_like(last_action))*(self.upper_bound_Q-last_action)*0.98*self.alpha
 
-    def get_action(self, state):
-        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        action = self.forward(state)
-        return action.detach().cpu().numpy()[0] 
-
-class StablePolicy3phase(nn.Module):
-    def __init__(self, env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3):
-        super(StablePolicy3phase, self).__init__()
-        use_cuda = torch.cuda.is_available()
-        self.device = torch.device("cuda" if use_cuda else "cpu")
-        self.env = env
-        self.hidden_dim = hidden_dim
-        self.scale = scale
-        assert action_dim==3, 'action dimension is not 3'
-        #in this code, we assume the shape of state is batch_size*3
-
-        #initialization
-        self.b = torch.rand(self.hidden_dim, 3)
-        self.b = (self.b/torch.sum(self.b))*scale
-        self.b = torch.nn.Parameter(self.b, requires_grad=True).to(self.device)
-        
-        self.c = torch.rand(self.hidden_dim, 3)
-        self.c = (self.c/torch.sum(self.c))*scale
-        self.c = torch.nn.Parameter(self.c, requires_grad=True).to(self.device)
-
-        self.lambda_pst = torch.nn.Parameter(torch.rand((self.hidden_dim, 6),device=self.device), requires_grad=True)
-        self.lambda_neg = torch.nn.Parameter(torch.rand((self.hidden_dim, 6),device=self.device), requires_grad=True)
-        self.sigma = 1e-3*torch.eye(3).to(self.device)
-
-    def forward(self, state):
-        state = torch.clip(state-torch.tensor(self.env.vmax-0.02),0,float("Inf")) - torch.clip(torch.tensor(self.env.vmin+0.02)-state, 0, float("Inf"))
-        self.w_plus = torch.zeros(self.hidden_dim, 3, 3).to(self.device)
-        for n in range(self.hidden_dim):
-            nth_dd = torch.zeros(3,3).to(self.device)
-            id = 0
-            for i in range(3):
-                for j in range(i+1):
-                    e_i = torch.zeros(3,1).to(self.device)
-                    e_i[i] = 1
-                    e_j = torch.zeros(3,1).to(self.device)
-                    e_j[j] = 1
-                    if i == j:
-                        nth_dd += torch.matmul(e_i,torch.transpose(e_i,0,1))*torch.square(self.lambda_pst[n,id])
-                    else:
-                        nth_dd += torch.matmul(e_i-e_j,torch.transpose(e_i-e_j,0,1))*torch.square(self.lambda_pst[n,id])
-                    id += 1
-            self.w_plus[n,:,:] = nth_dd
-        self.w_minus = -self.w_plus
-
-        b = self.b.data
-        b = b.clamp(min=0)
-        b = self.scale*b/torch.norm(b, 1)
-        self.b.data = b
-
-        self.b_plus = -self.b #shape: 3*hidden_size
-        self.b_minus = -self.b
-
-        self.nonlinear_plus = torch.zeros_like(state)
-        for i in range(self.hidden_dim):
-            self.nonlinear_plus += F.relu(torch.matmul(state, torch.transpose(self.w_plus[i], 0, 1))+self.b_plus[i])
-
-        self.nonlinear_minus = torch.zeros_like(state)
-        for i in range(self.hidden_dim):
-            self.nonlinear_minus -= F.relu(torch.matmul(state, torch.transpose(self.w_minus[i], 0, 1))+self.b_minus[i])
-        x = (self.nonlinear_plus+self.nonlinear_minus) 
-        x += torch.matmul(state, self.sigma)
-        
+        # x = (self.nonlinear_plus+self.nonlinear_minus) #previous version
+        gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
+        x = x_high_voltage + x_low_voltage
+        x_tmp = x.clone()
+        x_tmp -= gradient
+        x_tmp = self.safe_flow(x_tmp, last_action)
+        difference = x_tmp - x
+        x = x + difference 
         return x
     
-    def get_action(self, state):
-        state = torch.FloatTensor(state).to(self.device)
-        action = self.forward(state)
-        # x = state
-        # x.requires_grad = True
-        # action_jb = self.forward(x)
-        # jacob = torch.zeros(state.shape[1], state.shape[1]) 
-        # for j in range(3):
-        #     output = torch.zeros(1,state.shape[1]).to(self.device)
-        #     output[0,j]=1
-        #     jacob[j,:]=torch.autograd.grad(action_jb, x, grad_outputs=output, retain_graph=True)[0]  
-        # print(jacob)
-        # exit(0)
-        return action.detach().cpu().numpy()[0]
+    def safe_flow(self, action,last_Q):
+        action[action<0]=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q[action<0]),action[action<0])
+        action[action>0]=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q[action>0]),action[action>0])
+        return action
+
+    def get_action(self, state, last_action):
+        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        last_action = torch.FloatTensor(last_action).unsqueeze(0).to(self.device)
+        action = self.forward(state, last_action)
+        return action.detach().cpu().numpy()[0] 
 
 
 
@@ -319,9 +261,6 @@ class SafePolicy3phase(nn.Module):
                 self.policy_b = SafePolicyNetwork(env, obs_dim, action_dim_per_phase, hidden_dim, scale = 0.15, init_w=3e-3)
             if phase == 'c':
                 self.policy_c = SafePolicyNetwork(env, obs_dim, action_dim_per_phase, hidden_dim, scale = 0.15, init_w=3e-3)
-        # self.policy_a = SafePolicyNetwork(env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3)
-        # self.policy_b = SafePolicyNetwork(env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3)
-        # self.policy_c = SafePolicyNetwork(env, obs_dim, action_dim, hidden_dim, scale = 0.15, init_w=3e-3)
     def forward(self, state):
         action_list = []
         for i,phase in enumerate(self.env.injection_bus[self.bus_id]):
@@ -334,10 +273,6 @@ class SafePolicy3phase(nn.Module):
             if phase == 'c':
                 action = self.policy_c(state[:,i].unsqueeze(-1))
                 action_list.append(action)
-        # action_a = self.policy_a(state[:,0].unsqueeze(-1))
-        # action_b = self.policy_b(state[:,1].unsqueeze(-1))
-        # action_c = self.policy_c(state[:,2].unsqueeze(-1))
-        # action = torch.cat((action_a,action_b,action_c),dim=1)
         action = torch.cat(action_list,dim=1)
         action += (torch.maximum(state-1.03, torch.zeros_like(state).to(self.device))-torch.maximum(0.97-state,  torch.zeros_like(state).to(self.device)))*0.01
         return action
@@ -349,12 +284,14 @@ class SafePolicy3phase(nn.Module):
 
 # standard ddpg policy network
 class PolicyNetwork(nn.Module):
-    def __init__(self, env, obs_dim, action_dim, hidden_dim, init_w=3e-3):
+    def __init__(self, env, obs_dim, action_dim, hidden_dim, up=1, low=-1, init_w=3e-3):
         super(PolicyNetwork, self).__init__()
         use_cuda = torch.cuda.is_available()
         self.device   = torch.device("cuda" if use_cuda else "cpu")
 
         self.env = env
+        self.lower_bound_Q = low
+        self.upper_bound_Q = up
         self.linear1 = nn.Linear(obs_dim, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         self.linear3 = nn.Linear(hidden_dim, action_dim)
@@ -362,9 +299,8 @@ class PolicyNetwork(nn.Module):
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.linear3.bias.data.uniform_(-init_w, init_w)
 
-    def forward(self, state):
+    def forward(self, state, last_action=0):
         state.requires_grad = True
-        # state = state-1
         x = torch.relu(self.linear1(state))
         x = torch.relu(self.linear2(x))
         x = self.linear3(x)
@@ -410,18 +346,12 @@ class ValueNetwork(nn.Module):
 
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.linear3.bias.data.uniform_(-init_w, init_w)
-        # self.bn1 = nn.BatchNorm1d(hidden_dim)
-        # self.bn2 = nn.BatchNorm1d(hidden_dim)
-        # self.bn3 = nn.BatchNorm1d(1)
 
     def forward(self, state, action):
         x = torch.cat((state, action), dim=1)
         x = F.relu(self.linear1(x))
-        # x = self.bn1(x)
         x = F.relu(self.linear2(x))
-        # x = self.bn2(x)
         x = self.linear3(x)
-        # x = self.bn3(x)
         return x
 
 class ReplayBuffer:

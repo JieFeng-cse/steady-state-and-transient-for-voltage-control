@@ -75,9 +75,9 @@ class IEEE13bus(gym.Env):
             elif (self.state[i]>0.95 and self.state[i]<1.0):
                 reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.vmin-self.state[i], -np.inf, 0)],2)**2)   
             elif self.state[i]<0.95:
-                reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
+                reward_sep[i] = float(-10*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
             elif self.state[i]>1.05:
-                reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
+                reward_sep[i] = float(-10*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
         reward = np.sum(reward_sep)
         # state-transition dynamics
         for i in range(len(self.injection_bus)):

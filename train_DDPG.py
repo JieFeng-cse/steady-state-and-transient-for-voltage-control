@@ -1,5 +1,4 @@
 ### import collections
-from cv2 import phase
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
@@ -27,7 +26,7 @@ from env_single_phase_13bus import IEEE13bus, create_13bus
 from env_single_phase_123bus import IEEE123bus, create_123bus
 from env_three_phase_eu import Three_Phase_EU, create_eu_lv
 from IEEE_13_3p import IEEE13bus3p, create_13bus3p
-from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, ReplayBuffer, ReplayBufferPI, PolicyNetwork, SafePolicy3phase, StablePolicy3phase, LinearPolicy
+from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, ReplayBuffer, ReplayBufferPI, PolicyNetwork, SafePolicy3phase, LinearPolicy
 from ICNN import ICNN,convex_monotone_network
 
 use_cuda = torch.cuda.is_available()
@@ -42,17 +41,6 @@ parser.add_argument('--safe_type', default='three_single') #loss, dd
 args = parser.parse_args()
 seed = 10
 torch.manual_seed(seed)
-
-# Safe flow method for single phase
-def safe_flow(Q,action,alpha,limit,agent_num):
-    #this version only works for single phase case
-    solution = np.zeros_like(Q)
-    for i in range(agent_num):
-        if action[i]<0:
-            action[i]=np.maximum(alpha*(limit[i,0]-Q[i]),action[i])
-        elif action[i]>0:
-            action[i]=np.minimum(alpha*(limit[i,1]-Q[i]),action[i])
-    return action
 
 """
 Create Agent list and replay buffer
@@ -72,6 +60,9 @@ if args.env_name == '13bus':
     # injection_bus = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
     env = IEEE13bus(pp_net, injection_bus)
     num_agent = len(injection_bus)
+    Q_limit = np.asarray([[-1.2,1.2],[-1.2,1.0],[-1.3,0.6]])
+    C = np.asarray([0.7,0.5,0.6])*0.15
+    alpha = 0.7
 if args.env_name == '123bus':
     max_ac = 0.8
     pp_net = create_123bus()
@@ -113,8 +104,10 @@ for i in range(num_agent):
         action_dim = obs_dim
     value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     if args.algorithm == 'safe-ddpg' and not ph_num == 3:
-        policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
-        target_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
+        policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
+        target_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
     elif args.algorithm == 'safe-ddpg-convex':
         policy_net = convex_monotone_network(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
         target_policy_net = convex_monotone_network(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
@@ -199,22 +192,16 @@ elif (FLAG ==1):
     #         target_param.data.copy_(param.data)
 
     if args.algorithm == 'safe-ddpg':
-        num_episodes = 200    #13-3p
+        num_episodes = 500    #13-3p
         # num_episodes = 700
     else:
         # num_episodes = 700 #123 2000 13-3p 700
         num_episodes = 700
 
-    if args.algorithm == 'safe-ddpg-convex':
-        num_episodes = 300 
-
     # trajetory length each episode
     num_steps = 30  
     if args.env_name =='123bus':
         num_steps = 60
-    if args.env_name =='eu-lv':
-        num_steps = 30
-        # num_episodes *= 2
     if args.env_name =='13bus3p':
         num_steps = 30
     batch_size = 256
@@ -236,7 +223,8 @@ elif (FLAG ==1):
                     action_agent = np.zeros(3)
                     phases = env.injection_bus[env.injection_bus_str[i]]
                     id = get_id(phases)
-                    action_tmp = agent_list[i].policy_net.get_action(np.asarray([state[i,id]])) + np.random.normal(0, max_ac)/np.sqrt(episode+1)
+                    action_tmp = agent_list[i].policy_net.get_action(np.asarray([state[i,id]])) \
+                        + np.random.normal(0, max_ac)/np.sqrt(episode+1)
                     action_tmp = action_tmp.reshape(len(id),)  
                     for j in range(len(phases)):
                         action_agent[id[j]]=action_tmp[j]           
@@ -244,8 +232,8 @@ elif (FLAG ==1):
                     action_agent = np.clip(action_agent, -max_ac, max_ac) 
                     action_p.append(action_agent)
                 else:
-                    action_agent = agent_list[i].policy_net.get_action(np.asarray([state[i]]))  + np.random.normal(0, max_ac)/np.sqrt(episode+1)
-                    action_agent = np.clip(action_agent, -max_ac, max_ac) 
+                    action_agent = agent_list[i].policy_net.get_action(np.asarray([state[i]]), last_action[i]) \
+                        + np.random.normal(0, max_ac)/np.sqrt(episode+1)
                     action_p.append(action_agent)                    
                 action.append(action_agent)
 
@@ -253,7 +241,7 @@ elif (FLAG ==1):
             if ph_num == 3:
                 action = last_action - np.asarray(action).reshape(-1,3) #.reshape(-1,3) #if eu, reshape
             else:
-                action = last_action - np.asarray(action)
+                action = last_action + np.asarray(action)
 
             # execute action a_t and observe reward r_t and observe next state s_{t+1}
             next_state, reward, reward_sep, done = env.step_Preward(action, action_p)
@@ -336,7 +324,7 @@ if args.status == 'train':
 fig, axs = plt.subplots(1, num_agent, figsize=(15,3))
 for i in range(num_agent):
     # plot policy
-    N = 40
+    N = 50
     s_array = np.zeros(N,)
     
     a_array_baseline = np.zeros(N,)
@@ -360,10 +348,10 @@ for i in range(num_agent):
             for p in range(len(phases)):
                 action[id[p]]=action_tmp[p]
         else:
-            action = agent_list[i].policy_net.get_action(np.asarray([state])) 
+            action = agent_list[i].policy_net.get_action(np.asarray([state]),np.zeros_like([state])) 
         action = np.clip(action, -max_ac, max_ac) 
         a_array_baseline[j] = -action_baseline[0]
-        a_array[j] = -action
+        a_array[j] = action
     axs[i].plot(s_array, 2*a_array_baseline, '-.', label = 'Linear')
     for k in range(ph_num):        
         axs[i].plot(s_array, a_array[:,k], label = args.algorithm)
@@ -393,20 +381,18 @@ for step in range(100):
             action_agent = np.clip(action_agent, -max_ac, max_ac) 
             action.append(action_agent)
         else:
-            action_agent = agent_list[i].policy_net.get_action(np.asarray([state[i]]))
-            # action_agent = (np.maximum(state[i]-1.05, 0)-np.maximum(0.95-state[i], 0)).reshape((1,))
-            action_agent = np.clip(action_agent, -max_ac, max_ac)
+            action_agent = agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
             action.append(action_agent)
 
     # PI policy    
-    action = last_action - np.asarray(action)
+    action = last_action + np.asarray(action)
 
     # execute action a_t and observe reward r_t and observe next state s_{t+1}
-    next_state, reward, reward_sep, done = env.step_Preward(action, (last_action-action))
+    next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
     reward_list.append(reward)
     if done:
         print("finished")
-    action_list.append(last_action-action)
+    action_list.append(action-last_action)
     state_list.append(next_state)
     last_action = np.copy(action)
     state = next_state
