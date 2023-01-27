@@ -26,8 +26,8 @@ parser.add_argument('--env_name', default="13bus",
 parser.add_argument('--algorithm', default='safe-ddpg', help='name of algorithm')
 parser.add_argument('--safe_type', default='three_single')
 parser.add_argument('--safe_method', default='safe-flow') 
-parser.add_argument('--use_safe_flow', default=True) 
-parser.add_argument('--use_gradient', default=True) 
+parser.add_argument('--use_safe_flow', default='True') 
+parser.add_argument('--use_gradient', default='True') 
 args = parser.parse_args()
 seed = 10
 torch.manual_seed(seed)
@@ -57,6 +57,9 @@ if args.env_name == '123bus':
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
     env = IEEE123bus(pp_net, injection_bus)
     num_agent = 14
+    Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
+    C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
+    alpha = 0.7
     max_ac = 0.8
     slope = 5
 if args.env_name == '13bus3p':
@@ -87,7 +90,8 @@ for i in range(num_agent):
     if not ph_num == 3:
         safe_ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)    
         safe_ddpg_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
-            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
     else:
         if ph_num == 3:
             obs_dim = len(env.injection_bus[env.injection_bus_str[i]])
@@ -97,14 +101,16 @@ for i in range(num_agent):
     
     ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
     ddpg_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
-            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
 
     ddpg_agent = DDPG(policy_net=ddpg_policy_net, value_net=ddpg_value_net,
                  target_policy_net=ddpg_policy_net, target_value_net=ddpg_value_net)
     
     linear_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
     linear_policy_net = LinearPolicy(env=env, ph_num=ph_num, \
-            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i]).to(device)  
+            up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)  
 
     linear_agent = DDPG(policy_net=linear_policy_net, value_net=linear_value_net,
                  target_policy_net=linear_policy_net, target_value_net=linear_value_net)
@@ -117,8 +123,8 @@ for i in range(num_agent):
     linear_agent_list.append(linear_agent)
 
 for i in range(num_agent):
-    ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/ddpg/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
-    ddpg_agent_list[i].policy_net.load_state_dict(ddpg_policynet_dict)
+    # ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/ddpg/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
+    # ddpg_agent_list[i].policy_net.load_state_dict(ddpg_policynet_dict)
 
     linear_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/linear/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
     linear_agent_list[i].policy_net.load_state_dict(linear_policynet_dict)
@@ -260,6 +266,7 @@ def test_suc_rate(algm, step_num=60):
     final_state_list = []
     final_step_list = []
     control_cost_list = []
+    final_reward_list = []
     for rep in range(500):
         state = env.reset(rep)
         episode_reward = 0
@@ -292,20 +299,21 @@ def test_suc_rate(algm, step_num=60):
                 # sample action according to the current policy and exploration noise
                 else:
                     if algm == 'linear':
-                        action_agent = linear_agent_list[i].policy_net.get_action(np.asarray([state[i]])) 
+                        action_agent = linear_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i]) 
                     elif algm == 'safe-ddpg':
-                        action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]))
+                        action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
                     elif algm == 'ddpg':
-                        action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]))
+                        action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
                     # 
-                    action_agent = np.clip(action_agent, -max_ac, max_ac)
+                    # action_agent = np.clip(action_agent, -max_ac, max_ac)
                     action.append(action_agent)
 
             # PI policy    
-            action = last_action - np.asarray(action)
+            action = last_action + np.asarray(action)
             control_action.append(np.abs(action))
             # execute action a_t and observe reward r_t and observe next state s_{t+1}
-            next_state, reward, reward_sep, done = env.step_Preward(action, (last_action-action))
+            next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
+            done = False
             if done:
                 success_num += 1
                 final_step_list.append(step+1)
@@ -320,10 +328,12 @@ def test_suc_rate(algm, step_num=60):
             final_step_list.append(step_num)
             control_cost_list.append(np.sum(np.asarray(control_action)))
         final_state_list.append(next_state)
+        final_reward_list.append(reward)
     print(f'result for {algm}')
     print(success_num)
     print(np.mean(final_step_list), np.std(final_step_list))
     print('cost',np.mean(control_cost_list), np.std(control_cost_list))
+    print('final reward', np.mean(final_reward_list))
     return final_state_list
 
 def plot_bar(num_agent):

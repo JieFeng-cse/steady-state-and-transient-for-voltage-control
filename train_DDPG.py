@@ -39,8 +39,8 @@ parser.add_argument('--algorithm', default='safe-ddpg', help='name of algorithm'
 parser.add_argument('--status', default='train')
 parser.add_argument('--safe_type', default='three_single') #loss, dd
 parser.add_argument('--safe_method', default='safe-flow') 
-parser.add_argument('--use_safe_flow', default=True) 
-parser.add_argument('--use_gradient', default=True) 
+parser.add_argument('--use_safe_flow', default='True') 
+parser.add_argument('--use_gradient', default='True') 
 args = parser.parse_args()
 seed = 10
 torch.manual_seed(seed)
@@ -76,8 +76,8 @@ if args.env_name == '123bus':
     num_agent = 14
     Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
     C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
-    # if args.algorithm == 'safe-ddpg':
-    #     plr = 1.5e-4
+    if args.algorithm == 'safe-ddpg':
+        plr = 1.5e-4
 
 if args.env_name == '13bus3p':
     # injection_bus = np.array([675,633,680])
@@ -113,27 +113,27 @@ for i in range(num_agent):
     if args.algorithm == 'safe-ddpg' and not ph_num == 3:
         policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
-                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
         target_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
-                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
     elif args.algorithm == 'safe-ddpg' and ph_num == 3 and args.safe_type == 'three_single':
         policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
         target_policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
     elif args.algorithm == 'linear':
         policy_net = LinearPolicy(env=env, ph_num=ph_num, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
-                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
         target_policy_net = LinearPolicy(env=env, ph_num=ph_num, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
-                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
     else:
         policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
-                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
         target_policy_net = PolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
-                use_gradient=args.use_gradient, safe_flow=args.use_safe_flow).to(device)
+                use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
 
     target_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     
@@ -183,8 +183,8 @@ if (FLAG ==0):
             valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type}/value_net_checkpoint_a{i}.pth')
             policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type}/policy_net_checkpoint_a{i}.pth')
         else:
-            valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/value_net_checkpoint_a{i}.pth')
-            policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/policy_net_checkpoint_a{i}.pth')
+            valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_method}_value_net_checkpoint_a{i}.pth')
+            policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
         agent_list[i].value_net.load_state_dict(valuenet_dict)
         agent_list[i].policy_net.load_state_dict(policynet_dict)
 
@@ -206,11 +206,14 @@ elif (FLAG ==1):
     #         target_param.data.copy_(param.data)
 
     if args.algorithm == 'safe-ddpg':
-        num_episodes = 500    #13-3p
+        num_episodes = 700    #13-3p
         # num_episodes = 700
-    else:
+    elif args.algorithm == 'ddpg':
         # num_episodes = 700 #123 2000 13-3p 700
         num_episodes = 2000 #13 300
+    elif args.algorithm == 'linear':
+        num_episodes = 700
+
 
     # trajetory length each episode
     num_steps = 30  

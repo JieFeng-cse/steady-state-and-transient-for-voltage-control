@@ -150,11 +150,11 @@ class SafePolicyNetwork(nn.Module):
     def __init__(self, env, obs_dim, action_dim, hidden_dim,\
         up=1.0,low=-1.0, alpha=0.6, node_cost = 0.1,\
             use_gradient=True, safe_flow = True,\
-            scale = 0.15, init_w=3e-3):
+            scale = 0.20, init_w=3e-3):
         super(SafePolicyNetwork, self).__init__()
         use_cuda = torch.cuda.is_available()
         self.device   = torch.device("cuda" if use_cuda else "cpu")
-
+        self.gradient_only = False
         self.env = env
         self.hidden_dim = hidden_dim
         self.scale = scale        
@@ -237,6 +237,8 @@ class SafePolicyNetwork(nn.Module):
         x = x_high_voltage + x_low_voltage
         x_tmp = x.clone()
         x_tmp -= gradient
+        if self.gradient_only:
+            x_tmp = -gradient
         if self.use_safe_flow:
             x_tmp = self.safe_flow(x_tmp, last_action)
         difference = x_tmp - x.clone().detach()
@@ -244,8 +246,8 @@ class SafePolicyNetwork(nn.Module):
         return x
     
     def safe_flow(self, action,last_Q):
-        action[action<0]=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q[action<0]),action[action<0])
-        action[action>0]=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q[action>0]),action[action>0])
+        action=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q),action)
+        action=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q),action)
         return action
 
     def get_action(self, state, last_action):

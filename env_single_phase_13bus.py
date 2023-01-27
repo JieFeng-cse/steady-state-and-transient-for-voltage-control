@@ -36,6 +36,8 @@ class IEEE13bus(gym.Env):
         self.all_bus = all_bus
         
         self.state = np.ones(self.agentnum, )
+        self.init_state = np.ones(self.agentnum, )
+        self.C = np.asarray([0.7,0.5,0.6])*0.15
     
     def step(self, action): 
         
@@ -62,23 +64,23 @@ class IEEE13bus(gym.Env):
         
         done = False 
         #safe-ddpg reward
-        reward = float(-10*LA.norm(action)**2 -100*LA.norm(np.clip(self.state-self.vmax, 0, np.inf))**2
-                       - 100*LA.norm(np.clip(self.vmin-self.state, 0, np.inf))**2)
+        # reward = float(-10*LA.norm(action)**2 -100*LA.norm(np.clip(self.state-self.vmax, 0, np.inf))**2
+        #                - 100*LA.norm(np.clip(self.vmin-self.state, 0, np.inf))**2)
         #why in this part originally it is not square?
         # local reward
         agent_num = len(self.injection_bus)
         reward_sep = np.zeros(agent_num, )
 
-        for i in range(agent_num):
-            if (self.state[i]>1.0 and self.state[i]<1.05):
-                reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.state[i]-self.vmax, -np.inf, 0)],2)**2)   
-            elif (self.state[i]>0.95 and self.state[i]<1.0):
-                reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.vmin-self.state[i], -np.inf, 0)],2)**2)   
-            elif self.state[i]<0.95:
-                reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
-            elif self.state[i]>1.05:
-                reward_sep[i] = float(-1*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
-        reward = np.sum(reward_sep)
+        # for i in range(agent_num):
+        #     if (self.state[i]>1.0 and self.state[i]<1.05):
+        #         reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.state[i]-self.vmax, -np.inf, 0)],2)**2)   
+        #     elif (self.state[i]>0.95 and self.state[i]<1.0):
+        #         reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.vmin-self.state[i], -np.inf, 0)],2)**2)   
+        #     elif self.state[i]<0.95:
+        #         reward_sep[i] = float(-self.C[i]*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
+        #     elif self.state[i]>1.05:
+        #         reward_sep[i] = float(-self.C[i]*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
+        # reward = np.sum(reward_sep)
         # state-transition dynamics
         for i in range(len(self.injection_bus)):
             self.network.sgen.at[i, 'q_mvar'] = action[i] 
@@ -86,6 +88,10 @@ class IEEE13bus(gym.Env):
         pp.runpp(self.network, algorithm='bfsw', init = 'dc')
         
         self.state = self.network.res_bus.iloc[self.injection_bus].vm_pu.to_numpy()
+        reward = -np.squeeze(0.5*action.T@np.diag(self.C)@action + 0.5*action.T@(np.square(self.state)+np.square(self.init_state)\
+            -2*np.ones_like(self.state)))
+        for i in range(agent_num):
+            reward_sep[i] = -(0.5*np.square(action[i])*self.C[i]+0.5*action[i]*(np.square(self.state[i])+np.square(self.init_state[i])-2))
         
         if(np.min(self.state) > 0.95 and np.max(self.state)< 1.05):
             done = True
@@ -221,6 +227,7 @@ class IEEE13bus(gym.Env):
         # if not self.network['Converged_in_100_r']:
         #     print('fialed')
         self.state = self.network.res_bus.iloc[self.injection_bus].vm_pu.to_numpy()
+        self.init_state = np.copy(self.state)
         return self.state
     
     def reset0(self, seed=1): #reset voltage to nominal value
