@@ -235,14 +235,8 @@ class SafePolicyNetwork(nn.Module):
             gradient = 0
 
         x = x_high_voltage + x_low_voltage
-        x_tmp = x.clone()
-        x_tmp -= gradient
-        if self.gradient_only:
-            x_tmp = -gradient
-        if self.use_safe_flow:
-            x_tmp = self.safe_flow(x_tmp, last_action)
-        difference = x_tmp - x.clone().detach()
-        x = x + difference 
+        x -= gradient
+        x = self.safe_flow(x,last_action)
         return x
     
     def safe_flow(self, action,last_Q):
@@ -331,17 +325,13 @@ class PolicyNetwork(nn.Module):
         gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
         if not self.use_gradient:
             gradient = 0
-        x_tmp = x.clone()
-        x_tmp -= gradient
-        if self.use_safe_flow:
-            x_tmp = self.safe_flow(x_tmp, last_action)
-        difference = x_tmp - x.clone().detach()
-        x = x + difference 
+        x -= gradient
+        x = self.safe_flow(x,last_action)
         return x
     
     def safe_flow(self, action,last_Q):
-        action[action<0]=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q[action<0]),action[action<0])
-        action[action>0]=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q[action>0]),action[action>0])
+        action=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q),action)
+        action=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q),action)
         return action
 
     def get_action(self, state, last_action=0):
@@ -393,17 +383,13 @@ class LinearPolicy(nn.Module):
             gradient = 0
 
         x = x_high_voltage + x_low_voltage
-        x_tmp = x.clone()
-        x_tmp -= gradient
-        if self.use_safe_flow:
-            x_tmp = self.safe_flow(x_tmp, last_action)
-        difference = x_tmp - x.clone().detach()
-        x = x + difference 
+        x -= gradient
+        x = self.safe_flow(x,last_action)
         return x
     
     def safe_flow(self, action,last_Q):
-        action[action<0]=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q[action<0]),action[action<0])
-        action[action>0]=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q[action>0]),action[action>0])
+        action=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q),action)
+        action=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q),action)
         return action
 
     def get_action(self, state, last_action):

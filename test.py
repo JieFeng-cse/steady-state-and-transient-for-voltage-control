@@ -313,7 +313,7 @@ def test_suc_rate(algm, step_num=60):
             control_action.append(np.abs(action))
             # execute action a_t and observe reward r_t and observe next state s_{t+1}
             next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
-            done = False
+            # done = False
             if done:
                 success_num += 1
                 final_step_list.append(step+1)
@@ -688,8 +688,8 @@ def get_id(phases):
 
 if __name__ == "__main__":
     # print("test")
-    # test_suc_rate('safe-ddpg',step_num=100) #safe-ddpg
-    # test_suc_rate('linear',step_num=100)
+    test_suc_rate('safe-ddpg',step_num=100) #safe-ddpg
+    test_suc_rate('linear',step_num=100)
     # test_suc_rate('ddpg',step_num=100)
     # plot_bar_avg(len(injection_bus))
     # plot_bar(len(injection_bus))
@@ -701,4 +701,4 @@ if __name__ == "__main__":
     # plot_action_selcted([2,4,10]) #13b3p
     # plot_action_selcted([2,5,8]) #123b
     # plot_action_selcted([0,1,2])
-    plot_traj()
+    # plot_traj()
