@@ -321,7 +321,6 @@ class PolicyNetwork(nn.Module):
         x = torch.relu(self.linear2(x))
         x = self.linear3(x)
 
-        # x = (self.nonlinear_plus+self.nonlinear_minus) #previous version
         gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
         if not self.use_gradient:
             gradient = 0

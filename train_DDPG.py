@@ -38,7 +38,7 @@ parser.add_argument('--env_name', default="13bus",
 parser.add_argument('--algorithm', default='safe-ddpg', help='name of algorithm')
 parser.add_argument('--status', default='train')
 parser.add_argument('--safe_type', default='three_single') #loss, dd
-parser.add_argument('--safe_method', default='safe-flow') 
+parser.add_argument('--safe_method', default='safe-flow') #no_gradient
 parser.add_argument('--use_safe_flow', default='True') 
 parser.add_argument('--use_gradient', default='True') 
 args = parser.parse_args()
@@ -229,6 +229,7 @@ elif (FLAG ==1):
     for episode in range(num_episodes):
         state = env.reset(seed = episode)
         episode_reward = 0
+        episode_reward_list = []
         last_action = np.zeros((num_agent,ph_num)) #if single phase, 1, else ,3
 
         for step in range(num_steps):
@@ -295,14 +296,17 @@ elif (FLAG ==1):
 
                 if(done):
                     episode_reward += reward  
+                    episode_reward_list.append(reward)
                     break #no break if 13bus3p
                 else:
                     state = np.copy(next_state)
-                    episode_reward += reward    
+                    episode_reward += reward   
+                    episode_reward_list.append(reward) 
 
             last_action = np.copy(action)
 
-        rewards.append(episode_reward)
+        # rewards.append(episode_reward)
+        rewards.append(np.mean(episode_reward_list))
         avg_reward = np.mean(rewards[-40:])
         if(episode%50==0):
             print("Episode * {} * Avg Reward is ==> {}".format(episode, avg_reward))

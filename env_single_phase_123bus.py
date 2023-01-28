@@ -68,25 +68,11 @@ class IEEE123bus(gym.Env):
 
     def step_Preward(self, action, p_action): 
         
-        done = False 
-        #safe-ddpg
-        # reward = float(-10*LA.norm(p_action, 1) - 100*LA.norm(np.clip(self.state-self.vmax, 0, np.inf), 1)
-                    #    - 100*LA.norm(np.clip(self.vmin-self.state, 0, np.inf), 1))           
+        done = False      
         
         # local reward
         agent_num = len(self.injection_bus)
         reward_sep = np.zeros(agent_num, )
-     
-        # for i in range(agent_num):
-        #     if (self.state[i]>1.0 and self.state[i]<1.05):
-        #         reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.state[i]-self.vmax, -np.inf, 0)],2)**2)   
-        #     elif (self.state[i]>0.95 and self.state[i]<1.0):
-        #         reward_sep[i] = float(-0*LA.norm(p_action[i],1) -0*LA.norm([np.clip(self.vmin-self.state[i], -np.inf, 0)],2)**2)   
-        #     elif self.state[i]<0.95:
-        #         reward_sep[i] = float(-self.C[i]*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.vmin-self.state[i], 0, np.inf)],2)**2) 
-        #     elif self.state[i]>1.05:
-        #         reward_sep[i] = float(-self.C[i]*LA.norm(p_action[i],1) -100*LA.norm([np.clip(self.state[i]-self.vmax, 0, np.inf)],2)**2) 
-        # reward = np.sum(reward_sep)        #115
         
         # state-transition dynamics
         for i in range(len(self.injection_bus)):
