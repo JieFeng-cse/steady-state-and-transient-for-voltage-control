@@ -52,7 +52,7 @@ vlr = 2e-4
 plr = 1e-4
 ph_num = 1
 max_ac = 0.3
-alpha = 0.7
+alpha = 0.5
 if args.env_name == '56bus':
     pp_net = create_56bus()
     injection_bus = np.array([18, 21, 30, 45, 53])-1  
