@@ -208,8 +208,8 @@ class SafePolicyNetwork(nn.Module):
         c = self.scale*c/torch.norm(c, 1)
         self.c.data = c
         
-        self.b_plus=torch.matmul(-self.b, self.b_recover) - torch.tensor(self.env.vmax-0.02)
-        self.b_minus=torch.matmul(-self.b, self.b_recover) + torch.tensor(self.env.vmin+0.02)
+        self.b_plus=torch.matmul(-self.b, self.b_recover) - torch.tensor(self.env.vmax-0.01)#-0.02
+        self.b_minus=torch.matmul(-self.b, self.b_recover) + torch.tensor(self.env.vmin+0.01)#+0.02
         
         self.nonlinear_plus = torch.matmul(F.relu(torch.matmul(state, self.select_w)
                                                   + self.b_plus.view(1, self.hidden_dim)),
@@ -381,7 +381,7 @@ class LinearPolicy(nn.Module):
         if not self.use_gradient:
             gradient = 0
 
-        x = x_high_voltage + x_low_voltage
+        x = (x_high_voltage + x_low_voltage)*0
         x -= gradient
         x = self.safe_flow(x,last_action)
         return x
