@@ -218,7 +218,7 @@ class SafePolicyNetwork(nn.Module):
         self.nonlinear_minus = torch.matmul(F.relu(torch.matmul(state, self.select_wneg)
                                                    + self.b_minus.view(1, self.hidden_dim)),
                                             torch.transpose(self.w_minus, 0, 1))
-        if self.use_safe_flow:
+        if self.use_gradient:
             # for high voltage scenario, the reactive power injection is negative
             x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
                 (torch.ones_like(last_action)*self.lower_bound_Q-last_action)*0.98*self.alpha
@@ -226,8 +226,14 @@ class SafePolicyNetwork(nn.Module):
             x_low_voltage = -torch.tanh(self.nonlinear_minus)*\
                 (torch.ones_like(last_action)*self.upper_bound_Q-last_action)*0.98*self.alpha
         else:
-            x_high_voltage = self.nonlinear_plus
-            x_low_voltage = self.nonlinear_minus
+            # x_high_voltage = -self.nonlinear_plus
+            # x_low_voltage = self.nonlinear_minus
+            # for high voltage scenario, the reactive power injection is negative
+            x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
+                (torch.ones_like(last_action)*self.lower_bound_Q-last_action)*self.alpha
+            # for low voltage scenario, the reactive power injection is positive
+            x_low_voltage = -torch.tanh(self.nonlinear_minus)*\
+                (torch.ones_like(last_action)*self.upper_bound_Q-last_action)*self.alpha
 
         # x = (self.nonlinear_plus+self.nonlinear_minus) #previous version
         gradient = self.node_cost*last_action + torch.square(state) - torch.ones_like(state)
@@ -236,7 +242,8 @@ class SafePolicyNetwork(nn.Module):
 
         x = x_high_voltage + x_low_voltage
         x -= gradient
-        x = self.safe_flow(x,last_action)
+        if self.use_gradient:
+            x = self.safe_flow(x,last_action)
         return x
     
     def safe_flow(self, action,last_Q):

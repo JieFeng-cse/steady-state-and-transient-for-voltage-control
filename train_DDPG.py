@@ -52,7 +52,7 @@ vlr = 2e-4
 plr = 1e-4
 ph_num = 1
 max_ac = 0.3
-alpha = 0.5
+alpha = 0.2
 if args.env_name == '56bus':
     pp_net = create_56bus()
     injection_bus = np.array([18, 21, 30, 45, 53])-1  
@@ -65,8 +65,10 @@ if args.env_name == '13bus':
     # injection_bus = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
     env = IEEE13bus(pp_net, injection_bus)
     num_agent = len(injection_bus)
-    Q_limit = np.asarray([[-1.0,1.0],[-1.0,0.8],[-1.0,0.6]])
-    C = np.asarray([0.7,0.5,0.6])*0.15    
+    # Q_limit = np.asarray([[-1.0,1.0],[-1.0,0.8],[-1.0,0.6]])
+    # C = np.asarray([0.7,0.5,0.6])*0.15    
+    Q_limit = np.asarray([[-1.5,1.5],[-1.4,1.4],[-1.0,1.0]])
+    C = np.asarray([0.7,0.5,0.6])*0.15
 
 if args.env_name == '123bus':
     max_ac = 0.8
@@ -74,8 +76,10 @@ if args.env_name == '123bus':
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
     env = IEEE123bus(pp_net, injection_bus)
     num_agent = 14
-    Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
-    C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
+    # Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
+    # C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
+    Q_limit = np.asarray([[-21.6,21.6],[-18,18],[-21.6,21.6],[-10.8,10.8],[-9.45,9.45],[-20,20],[-20,20],[-16,16],[-4.725,4.725],[-7.2,7.2],[-7.2,7.2],[-6.75,6.75],[-6.75,6.75],[-5.4,5.4]])
+    C = np.asarray([0.2,0.25,0.1,0.3,0.3,0.2,0.2,0.3,0.9,0.7,0.7,0.7,0.6,0.7])*0.02
     if args.algorithm == 'safe-ddpg':
         plr = 1.5e-4
 
@@ -206,7 +210,7 @@ elif (FLAG ==1):
     #         target_param.data.copy_(param.data)
 
     if args.algorithm == 'safe-ddpg':
-        num_episodes = 700    #13-3p
+        num_episodes = 800    #13-3p
         # num_episodes = 700
     elif args.algorithm == 'ddpg':
         # num_episodes = 700 #123 2000 13-3p 700
