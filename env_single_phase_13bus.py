@@ -217,7 +217,8 @@ class IEEE13bus(gym.Env):
         #     print('fialed')
         self.state = self.network.res_bus.iloc[self.injection_bus].vm_pu.to_numpy()
         self.init_state = np.copy(self.state)
-        return self.state
+        all_bus = [1,2,5,3,4,7,8,9,6,10,11,12]
+        return self.state, self.network.res_bus.iloc[all_bus].vm_pu.to_numpy()
     
     def reset0(self, seed=1): #reset voltage to nominal value
         

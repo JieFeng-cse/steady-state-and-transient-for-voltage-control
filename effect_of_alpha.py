@@ -108,7 +108,7 @@ for i in range(num_agent):
 
 def plot_traj_123(seed):
     color_set = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-    fig, axs = plt.subplots(1, 2, figsize=(13,4))
+    fig, axs = plt.subplots(1, 2, figsize=(13,5))
     ddpg_plt=[]
     ddpg_a_plt=[]
     state = env.reset(seed)
@@ -197,24 +197,32 @@ def plot_traj_123(seed):
 
     
     matplotlib.rcParams['text.usetex']=True
-    axs[0].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*1.05, ':',linewidth=2,color=color_set[3])  #,label=r'$\bar{v}$'
+    axs[0].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*1.05, '--',linewidth=2,color='dimgray')  #,label=r'$\bar{v}$'
     # axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-21.6), ':',linewidth=2,label=r'$\underline{q}$'+f' at bus {injection_bus[2]+1}',color=color_set[4]) 
-    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-4.75), ':',linewidth=2,color=color_set[5]) #,label=r'$\underline{q}$'+f' at bus {injection_bus[8]+1}'
+    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-4.75), '--',linewidth=2,color='dimgray') #,label=r'$\underline{q}$'+f' at bus {injection_bus[8]+1}'
     # leg1 = plt.legend(safe_a_plt, safe_name, loc='lower left')
     # axs[0].legend(loc='lower left', prop={"size":20})
     # axs[1].legend(loc='lower left', prop={"size":20})
+    # box = axs[0].get_position()
+    # axs[0].set_position([box.x0-0.05*box.width, box.y0+0.09*box.height,
+    #                 box.width* 0.9, box.height*0.9])
+    # box = axs[1].get_position()
+    # axs[1].set_position([box.x0+0.05*box.width, box.y0+0.09*box.height,
+    #                 box.width* 0.9, box.height*0.9])
     box = axs[0].get_position()
-    axs[0].set_position([box.x0-0.05*box.width, box.y0+0.09*box.height,
-                    box.width* 0.9, box.height*0.9])
+    axs[0].set_position([box.x0-0.05*box.width, box.y0+0.4*box.height,
+                    box.width* 0.95, box.height*0.7])
     box = axs[1].get_position()
-    axs[1].set_position([box.x0+0.05*box.width, box.y0+0.09*box.height,
-                    box.width* 0.9, box.height*0.9])
+    axs[1].set_position([box.x0+0.05*box.width, box.y0+0.4*box.height,
+                    box.width* 0.95, box.height*0.7])
+    axs[0].legend(loc='lower center', bbox_to_anchor=(1.2, -0.9),
+        fancybox=True, ncol=3, prop={"size":15})
     # axs[0].legend(loc='right', bbox_to_anchor=(3.05, 0.4),
     #     fancybox=True, shadow=True, ncol=1,prop={"size":13})
-    axs[0].legend(loc='upper right', prop={"size":13})
-    axs[1].legend(loc='upper right', prop={"size":13})
-    axs[0].set_xlabel('Iteretion Steps')   
-    axs[1].set_xlabel('Iteretion Steps')  
+    # axs[0].legend(loc='upper right', prop={"size":13})
+    # axs[1].legend(loc='upper right', prop={"size":13})
+    axs[0].set_xlabel('Iteration Steps')   
+    axs[1].set_xlabel('Iteration Steps')  
     axs[0].set_ylabel('Bus Voltage [p.u.]')   
     axs[1].set_ylabel('q Injection [MVar]')  
     # axs[0].set_title(f'{seed}')

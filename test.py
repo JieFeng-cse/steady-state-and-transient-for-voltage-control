@@ -328,7 +328,7 @@ def test_suc_rate(algm, step_num=60):
             next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
             control_action.append(-gamma *reward)
             gamma *= 0.99
-            done = False
+            # done = False
             if done:
                 success_num += 1
                 final_step_list.append(step+1)
@@ -454,10 +454,10 @@ def plot_bar_avg(num_agent):
     plt.legend(loc='upper right')
     plt.show()
 #11, 36, 75
-def plot_traj_123(seed):
-    color_set = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+def plot_traj_123_broken(seed):
+    color_set = ['#1f77b4', '#ff7f0e', '#d62728', '#9467bd', '#8c564b'] #'#2ca02c', 
     line_type = ['-.','-']
-    fig, axs = plt.subplots(1, 2, figsize=(13,4))
+    fig, axs = plt.subplots(2, 1, figsize=(6,6), sharex=True, gridspec_kw={'height_ratios': [5,1]})
     ddpg_plt=[]
     safe_plt = []
     ddpg_a_plt=[]
@@ -468,7 +468,134 @@ def plot_traj_123(seed):
     action_list=[]
     state_list =[]
     state_list.append(state)
-    for step in range(100):
+    step_num=350
+    id1 = 3
+    id2 = 8
+    for step in range(step_num):
+        action = []
+        for i in range(num_agent):
+            # sample action according to the current policy and exploration noise
+            action_agent = linear_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
+            action.append(action_agent)
+
+        # PI policy    
+        action = last_action + np.asarray(action)
+        # execute action a_t and observe reward r_t and observe next state s_{t+1}
+        next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
+        # if done:
+        #     print("finished")
+        action_list.append(action)
+        state_list.append(next_state)
+        last_action = np.copy(action)
+        state = next_state
+    for idx,i in enumerate([id1,id2]): 
+        axs[0].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'Safe gradient flow at bus {injection_bus[i]+1}', linewidth=2,color=color_set[0])
+        axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'Safe gradient flow at bus {injection_bus[i]+1}', linewidth=2,color=color_set[0])
+
+    state = env.reset(seed)
+    episode_reward = 0
+    last_action = np.zeros((num_agent,1))
+    action_list=[]
+    state_list =[]
+    state_list.append(state)
+    for step in range(step_num):
+        action = []
+        for i in range(num_agent):
+            # sample action according to the current policy and exploration noise
+            action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
+            action.append(action_agent)
+
+        # PI policy    
+        action = last_action + np.asarray(action)
+
+        # execute action a_t and observe reward r_t and observe next state s_{t+1}
+        next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
+        # if done:
+        #     print("finished")
+        action_list.append(action)
+        state_list.append(next_state)
+        last_action = np.copy(action)
+        state = next_state
+    axs[0].plot(np.asarray(range(len(action_list)+5))-5,np.ones_like(range(len(action_list)+5))*(-4.725),'--', linewidth=2,color='dimgray')
+    # lb = axs[0].plot(range(len(action_list)), [0.95]*len(action_list), linestyle='--', dashes=(5, 10), color='g', label='lower bound')
+    # ub = axs[0].plot(range(len(action_list)), [1.05]*len(action_list), linestyle='--', dashes=(5, 10), color='r', label='upper bound')
+    for idx,i in enumerate([id1,id2]):    #[2,5,8]
+        dps = axs[0].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'Stable-DDPG at bus {injection_bus[i]+1}', linewidth=2,color=color_set[1])
+        dpa = axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'Stable-DDPG at bus {injection_bus[i]+1}', linewidth=2,color=color_set[1])
+        ddpg_plt.append(dps)
+        ddpg_a_plt.append(dpa)
+
+    state = env.reset(seed)
+    episode_reward = 0
+    last_action = np.zeros((num_agent,1))
+    action_list=[]
+    state_list =[]
+    state_list.append(state)
+    for step in range(step_num):
+        action = []
+        for i in range(num_agent):
+            # sample action according to the current policy and exploration noise
+            action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])#+np.random.normal(0, 0.05)
+            # action_agent = (np.maximum(state[i]-1.05, 0)-np.maximum(0.95-state[i], 0)).reshape((1,))*2
+            # action_agent = np.clip(action_agent, -max_ac, max_ac)
+            action.append(action_agent)
+
+        # PI policy    
+        action = last_action + np.asarray(action)
+
+        # execute action a_t and observe reward r_t and observe next state s_{t+1}
+        next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
+        # if done:
+        #     print("finished")
+        action_list.append(action)
+        state_list.append(next_state)
+        last_action = np.copy(action)
+        state = next_state
+    for idx,i in enumerate([id1,id2]): 
+        axs[0].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'TASRL at bus {injection_bus[i]+1}', linewidth=2,color=color_set[2])
+        axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'TASRL at bus {injection_bus[i]+1}', linewidth=2,color=color_set[2])
+
+    
+    matplotlib.rcParams['text.usetex']=True
+    # axs[0].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*1.05,'--', linewidth=2,color='dimgray')  #,label=r'$\bar{v}$'
+    # axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-21.6), ':',linewidth=2,label=r'$\underline{q}$'+f' at bus {injection_bus[2]+1}',color=color_set[4]) 
+    axs[1].plot(np.asarray(range(len(action_list)+5))-5,np.ones_like(range(len(action_list)+5))*(-10.8),'--', linewidth=2,color='dimgray') 
+    axs[0].set_ylim(-7, 0)  # outliers only
+    axs[1].set_ylim(-11, -10.5)  # most of the data
+    axs[0].set_xlim(-5, step_num)
+    axs[1].set_xlim(-5, step_num)
+    axs[0].spines['bottom'].set_visible(False)
+    axs[1].spines['top'].set_visible(False)
+    axs[0].xaxis.tick_top()
+    axs[0].tick_params(labeltop=False)  # don't put tick labels at the top
+    d = .25  # proportion of vertical to horizontal extent of the slanted line
+    kwargs = dict(marker=[(-1, -d), (1, d)], markersize=12,
+                linestyle="none", color='k', mec='k', mew=1, clip_on=False)
+    axs[0].plot([0, 1], [0, 0], transform=axs[0].transAxes, **kwargs)
+    axs[1].plot([0, 1], [1, 1], transform=axs[1].transAxes, **kwargs)
+    plt.subplots_adjust(
+        top=0.9, bottom=0.214, left=0.15, right=0.9, hspace=0.133, wspace=0.062
+    )
+    plt.show()
+
+def plot_traj_123(seed):
+    color_set = ['#1f77b4', '#ff7f0e',  '#d62728', '#9467bd', '#8c564b'] #'#2ca02c',
+    line_type = ['-.','-']
+    fig, axs = plt.subplots(1, 2, figsize=(13,6))
+    ddpg_plt=[]
+    safe_plt = []
+    ddpg_a_plt=[]
+    safe_a_plt = []
+    state = env.reset(seed)
+    episode_reward = 0
+    last_action = np.zeros((num_agent,1))
+    action_list=[]
+    state_list =[]
+    state_list.append(state)
+    step_num=350
+    id1 = 3
+    id2 = 8
+    for step in range(step_num):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
@@ -488,7 +615,7 @@ def plot_traj_123(seed):
         state_list.append(next_state)
         last_action = np.copy(action)
         state = next_state
-    for idx,i in enumerate([2,8]): 
+    for idx,i in enumerate([id1,id2]): 
         axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], line_type[idx], label = f'Safe gradient flow at bus {injection_bus[i]+1}', linewidth=2,color=color_set[0])
         axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'Safe gradient flow at bus {injection_bus[i]+1}', linewidth=2,color=color_set[0])
 
@@ -498,7 +625,7 @@ def plot_traj_123(seed):
     action_list=[]
     state_list =[]
     state_list.append(state)
-    for step in range(100):
+    for step in range(step_num):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
@@ -510,16 +637,17 @@ def plot_traj_123(seed):
 
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
-        if done:
-            print("finished")
+        # if done:
+        #     print("finished")
         action_list.append(action)
         state_list.append(next_state)
         last_action = np.copy(action)
         state = next_state
-    
+    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-4.725),'--', linewidth=2,color='dimgray') #,label=r'$\underline{q}$'+f' at bus {injection_bus[8]+1}'
+    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-10.8),'--', linewidth=2,color='dimgray') 
     # lb = axs[0].plot(range(len(action_list)), [0.95]*len(action_list), linestyle='--', dashes=(5, 10), color='g', label='lower bound')
     # ub = axs[0].plot(range(len(action_list)), [1.05]*len(action_list), linestyle='--', dashes=(5, 10), color='r', label='upper bound')
-    for idx,i in enumerate([2,8]):    #[2,5,8]
+    for idx,i in enumerate([id1,id2]):    #[2,5,8]
         dps = axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], line_type[idx], label = f'Stable-DDPG at bus {injection_bus[i]+1}', linewidth=2,color=color_set[1])
         dpa = axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'Stable-DDPG at bus {injection_bus[i]+1}', linewidth=2,color=color_set[1])
         ddpg_plt.append(dps)
@@ -531,7 +659,7 @@ def plot_traj_123(seed):
     action_list=[]
     state_list =[]
     state_list.append(state)
-    for step in range(100):
+    for step in range(step_num):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
@@ -551,36 +679,38 @@ def plot_traj_123(seed):
         state_list.append(next_state)
         last_action = np.copy(action)
         state = next_state
-    for idx,i in enumerate([2,8]): 
+    for idx,i in enumerate([id1,id2]): 
         axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], line_type[idx], label = f'TASRL at bus {injection_bus[i]+1}', linewidth=2,color=color_set[2])
         axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], line_type[idx], label = f'TASRL at bus {injection_bus[i]+1}', linewidth=2,color=color_set[2])
 
     
     matplotlib.rcParams['text.usetex']=True
-    axs[0].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*1.05, ':',linewidth=2,color=color_set[3])  #,label=r'$\bar{v}$'
+    axs[0].plot(np.asarray(range(len(action_list)+5))-5,np.ones_like(range(len(action_list)+5))*(1.05),'--', linewidth=2,color='dimgray') #,label=r'$\bar{v}$'
     # axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-21.6), ':',linewidth=2,label=r'$\underline{q}$'+f' at bus {injection_bus[2]+1}',color=color_set[4]) 
-    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-4.75), ':',linewidth=2,color=color_set[5]) #,label=r'$\underline{q}$'+f' at bus {injection_bus[8]+1}'
+    
+    axs[0].set_xlim(-5, step_num)
+    axs[1].set_xlim(-5, step_num)
     # leg1 = plt.legend(safe_a_plt, safe_name, loc='lower left')
     # axs[0].legend(loc='lower left', prop={"size":20})
     # axs[1].legend(loc='lower left', prop={"size":20})
     box = axs[0].get_position()
-    axs[0].set_position([box.x0-0.1*box.width, box.y0+0.09*box.height,
-                    box.width* 0.85, box.height*0.9])
+    axs[0].set_position([box.x0-0.05*box.width, box.y0+0.2*box.height,
+                    box.width* 0.95, box.height*0.8])
     box = axs[1].get_position()
-    axs[1].set_position([box.x0-0.2*box.width, box.y0+0.09*box.height,
-                    box.width* 0.85, box.height*0.9])
-    axs[0].legend(loc='right', bbox_to_anchor=(3.05, 0.4),
-        fancybox=True, shadow=True, ncol=1,prop={"size":13})
+    axs[1].set_position([box.x0+0.05*box.width, box.y0+0.2*box.height,
+                    box.width* 0.95, box.height*0.8])
+    axs[0].legend(loc='lower center', bbox_to_anchor=(1.2, -0.4),
+        fancybox=True, shadow=True, ncol=3,prop={"size":13})
     # axs[1].legend(loc='upper right', prop={"size":13})
-    axs[0].set_xlabel('Iteretion Steps')   
-    axs[1].set_xlabel('Iteretion Steps')  
+    axs[0].set_xlabel('Iteration Steps')   
+    axs[1].set_xlabel('Iteration Steps')  
     axs[0].set_ylabel('Bus Voltage [p.u.]')   
     axs[1].set_ylabel('q Injection [MVar]')  
     plt.show()
 
 def plot_F(seed):
-    color_set = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-    fig = plt.figure(figsize=(9,6))
+    color_set = ['#1f77b4', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
+    fig = plt.figure(figsize=(6.5,6))
     axs = fig.add_subplot(1, 1, 1)
 
     state = env.reset(seed)
@@ -588,7 +718,7 @@ def plot_F(seed):
     last_action = np.zeros((num_agent,1))
     action_list=[]
     state_list =[]
-    n_step = 200
+    n_step = 350
     # state_list.append(state)
     for step in range(n_step):
         action = []
@@ -602,14 +732,18 @@ def plot_F(seed):
 
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
-        if done:
-            print("finished")
+        # if done:
+        #     print("finished")
         action_list.append(action)
         state_list.append(-reward)
+        if step<1:
+            continue
+        elif state_list[step]>state_list[step-1]:
+            print('violtate')
         last_action = np.copy(action)
         state = next_state
     
-    axs.plot(range(len(state_list)), np.array(state_list)[:], '--', label = f'Safe gradient flow', linewidth=2,color=color_set[2])
+    axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'Safe gradient flow', linewidth=2,color=color_set[0])
     state = env.reset(seed)
     last_action = np.zeros((num_agent,1))
     state_list =[]
@@ -627,13 +761,13 @@ def plot_F(seed):
 
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
-        if done:
-            print("finished")
+        # if done:
+        #     print("finished")
         state_list.append(-reward)
         last_action = np.copy(action)
         state = next_state
     
-    axs.plot(range(len(state_list)), np.array(state_list)[:], '-.', label = f'Stable-DDPG', linewidth=2,color=color_set[0])
+    axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'Stable-DDPG', linewidth=2,color=color_set[1])
 
 
     state = env.reset(seed)
@@ -656,21 +790,21 @@ def plot_F(seed):
 
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
-        if done:
-            print("finished")
         action_list.append(action)
         state_list.append(-reward)
         last_action = np.copy(action)
         state = next_state
     
-    axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'TASRL', linewidth=2,color=color_set[1])
-    box = axs.get_position()
-    axs.set_position([box.x0+0.05*box.width, box.y0+0.05*box.height,
-                    box.width* 0.95, box.height*0.9])
+    axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'TASRL', linewidth=2,color=color_set[2])
     
     axs.set_ylabel('Objective F(q)')   
-    axs.set_xlabel('Iteretion Steps')  
-    axs.legend()
+    axs.set_xlabel('Iteration Steps')  
+    plt.xticks(fontsize=20, rotation=0)
+    # axs.legend()
+    plt.subplots_adjust(
+        top=0.9, bottom=0.214, left=0.15, right=0.9, hspace=0.133, wspace=0.062
+    )
+    # plt.close()
     plt.show()
 
 def plot_action_selcted(selected=[1,5,9],plot_safe=True, plot_linear=True,plot_ddpg=True):    
@@ -847,9 +981,11 @@ if __name__ == "__main__":
     # test_suc_rate('linear')
     # plot_action_selcted()
     # plot_bar(len(injection_bus))
-    plot_traj_123(17)
+    # plot_traj_123_broken(17)#3,5
+    # plot_traj_123(17)
     # plot_action_selcted([1,4,9]) #13b3p
     # plot_action_selcted([2,4,10]) #13b3p
     # plot_action_selcted([2,5,8],True,True,True) #123b 2,5,8
     # plot_action_selcted([0,1,2])
-    plot_F(13)
+    
+    plot_F(17)#13
