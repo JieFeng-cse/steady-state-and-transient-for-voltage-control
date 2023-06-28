@@ -973,7 +973,7 @@ def get_id(phases):
 
 if __name__ == "__main__":
     # print("test")
-    # test_suc_rate('safe-ddpg',step_num=100) #safe-ddpg
+    test_suc_rate('safe-ddpg',step_num=100) #safe-ddpg
     # test_suc_rate('linear',step_num=1000)
     # test_suc_rate('ddpg',step_num=100)
     # plot_bar_avg(len(injection_bus))

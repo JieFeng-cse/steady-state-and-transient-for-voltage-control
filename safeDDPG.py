@@ -208,8 +208,8 @@ class SafePolicyNetwork(nn.Module):
         c = self.scale*c/torch.norm(c, 1)
         self.c.data = c
         
-        self.b_plus=torch.matmul(-self.b, self.b_recover) - torch.tensor(self.env.vmax-0.01)#-0.01
-        self.b_minus=torch.matmul(-self.b, self.b_recover) + torch.tensor(self.env.vmin+0.01)#+0.01
+        self.b_plus=torch.matmul(-self.b, self.b_recover) - torch.tensor(self.env.vmax-0.005)#-0.01
+        self.b_minus=torch.matmul(-self.b, self.b_recover) + torch.tensor(self.env.vmin+0.005)#+0.01
         
         self.nonlinear_plus = torch.matmul(F.relu(torch.matmul(state, self.select_w)
                                                   + self.b_plus.view(1, self.hidden_dim)),
@@ -221,10 +221,10 @@ class SafePolicyNetwork(nn.Module):
         if self.use_gradient:
             # for high voltage scenario, the reactive power injection is negative
             x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
-                (torch.ones_like(last_action)*self.lower_bound_Q-last_action)*0.98*self.alpha
+                (torch.ones_like(last_action)*self.lower_bound_Q-last_action)*self.alpha*0.98
             # for low voltage scenario, the reactive power injection is positive
             x_low_voltage = -torch.tanh(self.nonlinear_minus)*\
-                (torch.ones_like(last_action)*self.upper_bound_Q-last_action)*0.98*self.alpha
+                (torch.ones_like(last_action)*self.upper_bound_Q-last_action)*self.alpha*0.98
         else:
             # x_high_voltage = -self.nonlinear_plus
             # x_low_voltage = self.nonlinear_minus
@@ -241,12 +241,16 @@ class SafePolicyNetwork(nn.Module):
             gradient = 0
 
         x = x_high_voltage + x_low_voltage
-        if gradient*x>0:
-            x=0
+        # tmp = x.clone()
+        # if gradient*x>0:
+        #     x=0
         x -= gradient
+        # if torch.abs(gradient)>0.2:
+        #     print('gradient is too large')
+        #     exit(0)
         if self.use_gradient:
             x = self.safe_flow(x,last_action)
-        return x
+        return x #, tmp
     
     def safe_flow(self, action,last_Q):
         action=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q),action)
@@ -256,8 +260,8 @@ class SafePolicyNetwork(nn.Module):
     def get_action(self, state, last_action):
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         last_action = torch.FloatTensor(last_action).unsqueeze(0).to(self.device)
-        action = self.forward(state, last_action)
-        return action.detach().cpu().numpy()[0] 
+        action = self.forward(state, last_action) #pi
+        return action.detach().cpu().numpy()[0]#, pi.detach().cpu().numpy()[0]
 
 
 

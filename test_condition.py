@@ -91,12 +91,16 @@ for i in range(1000):
     last_action = np.zeros((num_agent,ph_num))
     for step in range(20):
         action = []
+        pi = []
         for j in range(num_agent):
-            action_agent = safe_ddpg_agent_list[j].policy_net.get_action(np.asarray([state[j]]),last_action[j])
+            action_agent, pi_agent = safe_ddpg_agent_list[j].policy_net.get_action(np.asarray([state[j]]),last_action[j])
             action.append(action_agent)
+            pi.append(pi_agent)
             if np.abs(state[j]-state_desired[index[j]])>0.000001:
                 K[index[j]]=action_agent/(state[j]-state_desired[index[j]])
                 assert K[index[j]]<0
+        if np.linalg.norm(action) < np.linalg.norm(pi):
+            print('violate')
         tmp = C@XX_inv+np.eye(12)-np.diag(K)
         test_m = np.transpose(tmp)@tmp - np.diag(K)@np.diag(K)
         eig_v = np.linalg.eigvals(test_m)

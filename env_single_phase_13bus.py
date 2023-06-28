@@ -76,6 +76,7 @@ class IEEE13bus(gym.Env):
 
         pp.runpp(self.network, algorithm='bfsw', init = 'dc')
         
+        
         self.state = self.network.res_bus.iloc[self.injection_bus].vm_pu.to_numpy()
         reward = -np.squeeze(0.5*action.T@np.diag(self.C)@action + 0.5*action.T@(np.square(self.state)+np.square(self.init_state)\
             -2*np.ones_like(self.state)))
@@ -159,7 +160,7 @@ class IEEE13bus(gym.Env):
     def reset(self, seed=1): #sample different initial volateg conditions during training
         np.random.seed(seed)
         senario = np.random.choice([0,1])
-        # senario = 0
+        # senario = 1
         if(senario == 0):#low voltage 
            # Low voltage
             self.network.sgen['p_mw'] = 0.0
@@ -274,6 +275,8 @@ def create_13bus():
 
 if __name__ == "__main__":
     net = create_13bus()
+    print(net.load.const_z_percent)
+    print(net.load.const_i_percent)
     injection_bus = np.array([2, 7, 9])
     # injection_bus = np.array([1,2,3,4,5,6, 7, 8,9,10,11,12])
     env = IEEE13bus(net, injection_bus)
@@ -283,7 +286,7 @@ if __name__ == "__main__":
     #     print(state)
     state_list = []
     for i in range(200):
-        state = env.reset(i)
+        state,_ = env.reset(i)
         state_list.append(state)
     state_list = np.array(state_list)
     fig, axs = plt.subplots(1, 3, figsize=(6,3))

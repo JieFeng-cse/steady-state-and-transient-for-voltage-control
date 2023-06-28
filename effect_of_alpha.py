@@ -133,8 +133,8 @@ def plot_traj_123(seed):
         last_action = np.copy(action)
         state = next_state
     for idx,i in enumerate([2,8]): 
-        axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '--', label = r'$\alpha_h=0.2$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
-        axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], '--', label = r'$\alpha_h=0.2$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
+        axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '--', label = r'$\alpha=0.2$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
+        axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], '--', label = r'$\alpha=0.2$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
 
     state = env.reset(seed)
     episode_reward = 0
@@ -162,8 +162,8 @@ def plot_traj_123(seed):
     # lb = axs[0].plot(range(len(action_list)), [0.95]*len(action_list), linestyle='--', dashes=(5, 10), color='g', label='lower bound')
     # ub = axs[0].plot(range(len(action_list)), [1.05]*len(action_list), linestyle='--', dashes=(5, 10), color='r', label='upper bound')
     for idx,i in enumerate([2,8]):    #[2,5,8]
-        dps = axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-.', label = r'$\alpha_h=0.5$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
-        dpa = axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], '-.', label = r'$\alpha_h=0.5$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
+        dps = axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-.', label = r'$\alpha=0.5$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
+        dpa = axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], '-.', label = r'$\alpha=0.5$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
         ddpg_plt.append(dps)
         ddpg_a_plt.append(dpa)
 
@@ -192,8 +192,8 @@ def plot_traj_123(seed):
         last_action = np.copy(action)
         state = next_state
     for idx,i in enumerate([2,8]): 
-        axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-', label = r'$\alpha_h=0.8$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
-        axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], label = r'$\alpha_h=0.8$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
+        axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-', label = r'$\alpha=0.8$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
+        axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], label = r'$\alpha=0.8$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
 
     
     matplotlib.rcParams['text.usetex']=True
@@ -215,7 +215,7 @@ def plot_traj_123(seed):
     box = axs[1].get_position()
     axs[1].set_position([box.x0+0.05*box.width, box.y0+0.4*box.height,
                     box.width* 0.95, box.height*0.7])
-    axs[0].legend(loc='lower center', bbox_to_anchor=(1.2, -0.9),
+    axs[0].legend(loc='lower center', bbox_to_anchor=(1.2, -0.7),
         fancybox=True, ncol=3, prop={"size":15})
     # axs[0].legend(loc='right', bbox_to_anchor=(3.05, 0.4),
     #     fancybox=True, shadow=True, ncol=1,prop={"size":13})
@@ -226,7 +226,7 @@ def plot_traj_123(seed):
     axs[0].set_ylabel('Bus Voltage [p.u.]')   
     axs[1].set_ylabel('q Injection [MVar]')  
     # axs[0].set_title(f'{seed}')
-    plt.show()
+    plt.savefig('alpha.png')
 
 if __name__ == "__main__":
     
