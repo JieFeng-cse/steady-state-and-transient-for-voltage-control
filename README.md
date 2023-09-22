@@ -28,7 +28,7 @@ Note: This code is for academic use only.
 
 
 ## Citation
-''''
+````
 @ARTICLE{10163934,
   author={Feng, Jie and Cui, Wenqi and Cortés, Jorge and Shi, Yuanyuan},
   journal={IEEE Control Systems Letters}, 
@@ -39,4 +39,4 @@ Note: This code is for academic use only.
   pages={2845-2850},
   doi={10.1109/LCSYS.2023.3289435}}
 
-''''
+````
