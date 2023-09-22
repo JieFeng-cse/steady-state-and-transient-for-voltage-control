@@ -11,11 +11,9 @@ import torch
 import torch.nn.functional as F
 import argparse
 
-from environment_single_phase import create_56bus, VoltageCtrl_nonlinear
 from env_single_phase_13bus import IEEE13bus, create_13bus
 from env_single_phase_123bus import IEEE123bus, create_123bus
-from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, PolicyNetwork, SafePolicy3phase, LinearPolicy
-from IEEE_13_3p import IEEE13bus3p, create_13bus3p
+from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, PolicyNetwork, LinearPolicy
 from tqdm import tqdm
 
 
@@ -41,17 +39,12 @@ Create Agent list and replay buffer
 max_ac = 0.3
 ph_num = 1
 slope = 2
-if args.env_name == '56bus':
-    pp_net = create_56bus()
-    injection_bus = np.array([18, 21, 30, 45, 53])-1  
-    env = VoltageCtrl_nonlinear(pp_net, injection_bus)
-    num_agent = 5
+
 if args.env_name == '13bus':
     pp_net = create_13bus()
     injection_bus = np.array([2, 7, 9])
     env = IEEE13bus(pp_net, injection_bus)
     num_agent = 3
-    # Q_limit = np.asarray([[-1.0,1.0],[-1.0,0.8],[-1.0,0.6]])
     Q_limit = np.asarray([[-1.5,1.5],[-1.4,1.4],[-1.0,0.6]])
     C = np.asarray([0.7,0.5,0.6])*0.15
     alpha = 0.5
@@ -60,9 +53,8 @@ if args.env_name == '123bus':
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
     env = IEEE123bus(pp_net, injection_bus)
     num_agent = 14
-    # Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
     Q_limit = np.asarray([[-21.6,21.6],[-18,18],[-21.6,21.6],[-10.8,10.8],[-9.45,9.45],[-20,20],[-20,20],[-16,16],[-4.725,4.725],[-7.2,7.2],[-7.2,7.2],[-6.75,6.75],[-6.75,6.75],[-5.4,5.4]])
-    # C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
+    
     C = np.asarray([0.2,0.25,0.1,0.3,0.3,0.2,0.2,0.3,0.9,0.7,0.7,0.7,0.6,0.7])*0.02
     if args.safe_method == 'project':
         alpha = 1
@@ -70,15 +62,7 @@ if args.env_name == '123bus':
         alpha =0.5
     max_ac = 0.8
     slope = 5
-if args.env_name == '13bus3p':
-    # injection_bus = np.array([675,633,680])
-    injection_bus = np.array([633,634,671,645,646,692,675,611,652,632,680,684])
-    pp_net, injection_bus_dict = create_13bus3p(injection_bus) 
-    max_ac = 0.4
-    env = IEEE13bus3p(pp_net,injection_bus_dict)
-    num_agent = len(injection_bus)
-    ph_num=3
-    # slope = 3
+
 
 if ph_num == 3:
     type_name = 'three-phase'
@@ -100,12 +84,6 @@ for i in range(num_agent):
         safe_ddpg_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
             up=Q_limit[i,1],low=Q_limit[i,0],alpha=alpha,node_cost=C[i],\
                 use_gradient=(args.use_gradient=='True'), safe_flow=(args.use_safe_flow=='True')).to(device)
-    else:
-        if ph_num == 3:
-            obs_dim = len(env.injection_bus[env.injection_bus_str[i]])
-            action_dim = obs_dim
-        safe_ddpg_policy_net = SafePolicy3phase(env, obs_dim, action_dim, hidden_dim, env.injection_bus_str[i]).to(device)
-        safe_ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
     
     ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)  
     ddpg_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim, \
@@ -131,11 +109,6 @@ for i in range(num_agent):
     linear_agent_list.append(linear_agent)
 
 for i in range(num_agent):
-    # ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/ddpg/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
-    # ddpg_agent_list[i].policy_net.load_state_dict(ddpg_policynet_dict)
-
-    # linear_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/linear/{args.safe_method}_policy_net_checkpoint_a{i}.pth')
-    # linear_agent_list[i].policy_net.load_state_dict(linear_policynet_dict)
     ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/safe-ddpg/no_gradient_policy_net_checkpoint_a{i}.pth')
     ddpg_agent_list[i].policy_net.load_state_dict(ddpg_policynet_dict)
 
@@ -471,19 +444,17 @@ def plot_traj_123_broken(seed):
     step_num=350
     id1 = 3
     id2 = 8
+
     for step in range(step_num):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
             action_agent = linear_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
             action.append(action_agent)
-
         # PI policy    
         action = last_action + np.asarray(action)
         # execute action a_t and observe reward r_t and observe next state s_{t+1}
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
-        # if done:
-        #     print("finished")
         action_list.append(action)
         state_list.append(next_state)
         last_action = np.copy(action)
@@ -502,7 +473,8 @@ def plot_traj_123_broken(seed):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
+            # action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i]) #should use this one, the following one is only for a broken example
+            action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i],gamma=10)
             action.append(action_agent)
 
         # PI policy    
@@ -576,6 +548,7 @@ def plot_traj_123_broken(seed):
     plt.subplots_adjust(
         top=0.9, bottom=0.214, left=0.15, right=0.9, hspace=0.133, wspace=0.062
     )
+    plt.savefig('action.png')
     plt.show()
 
 def plot_traj_123(seed):
@@ -629,7 +602,8 @@ def plot_traj_123(seed):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
+            # action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
+            action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i],gamma=1)
             action.append(action_agent)
 
         # PI policy    
@@ -706,6 +680,7 @@ def plot_traj_123(seed):
     axs[1].set_xlabel('Iteration Steps')  
     axs[0].set_ylabel('Bus Voltage [p.u.]')   
     axs[1].set_ylabel('q Injection [MVar]')  
+    plt.savefig('voltage.png')
     plt.show()
 
 def plot_F(seed):
@@ -718,13 +693,13 @@ def plot_F(seed):
     last_action = np.zeros((num_agent,1))
     action_list=[]
     state_list =[]
-    n_step = 350
+    n_step = 350 #was 350
     # state_list.append(state)
     for step in range(n_step):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = linear_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])#+np.random.normal(0, 0.05)
+            action_agent = linear_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
             action.append(action_agent)
 
         # PI policy    
@@ -753,7 +728,8 @@ def plot_F(seed):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
+            # action_agent = ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i]) #if want to compare stable-DDPG, use this line
+            action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i],gamma=10)
             action.append(action_agent)
 
         # PI policy    
@@ -765,9 +741,15 @@ def plot_F(seed):
         #     print("finished")
         state_list.append(-reward)
         last_action = np.copy(action)
+        if step<1:
+            continue
+        elif state_list[step]>state_list[step-1]:
+            print('violtate')
+            print(step)
         state = next_state
     
-    axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'Stable-DDPG', linewidth=2,color=color_set[1])
+    # axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'Stable-DDPG', linewidth=2,color=color_set[1])
+    axs.plot(range(len(state_list)), np.array(state_list)[:], '-', label = f'TASRL-slope', linewidth=2,color=color_set[1])
 
 
     state = env.reset(seed)
@@ -792,6 +774,11 @@ def plot_F(seed):
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))
         action_list.append(action)
         state_list.append(-reward)
+        if step<1:
+            continue
+        elif state_list[step]>state_list[step-1]:
+            print('violtate, TASRL')
+            print(step)
         last_action = np.copy(action)
         state = next_state
     
@@ -800,12 +787,13 @@ def plot_F(seed):
     axs.set_ylabel('Objective F(q)')   
     axs.set_xlabel('Iteration Steps')  
     plt.xticks(fontsize=20, rotation=0)
-    # axs.legend()
+    axs.legend()
     plt.subplots_adjust(
         top=0.9, bottom=0.214, left=0.15, right=0.9, hspace=0.133, wspace=0.062
     )
     # plt.close()
-    plt.show()
+    # plt.show()
+    plt.savefig('F_traj.png')
 
 def plot_action_selcted(selected=[1,5,9],plot_safe=True, plot_linear=True,plot_ddpg=True):    
     color_set = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
@@ -972,20 +960,9 @@ def get_id(phases):
 
 
 if __name__ == "__main__":
-    # print("test")
-    test_suc_rate('safe-ddpg',step_num=100) #safe-ddpg
-    # test_suc_rate('linear',step_num=1000)
-    # test_suc_rate('ddpg',step_num=100)
-    # plot_bar_avg(len(injection_bus))
-    # plot_bar(len(injection_bus))
-    # test_suc_rate('linear')
-    # plot_action_selcted()
-    # plot_bar(len(injection_bus))
-    # plot_traj_123_broken(17)#3,5
-    # plot_traj_123(17)
-    # plot_action_selcted([1,4,9]) #13b3p
-    # plot_action_selcted([2,4,10]) #13b3p
-    # plot_action_selcted([2,5,8],True,True,True) #123b 2,5,8
-    # plot_action_selcted([0,1,2])
     
-    plot_F(17)#13
+    plot_traj_123_broken(17)
+    plot_traj_123(17)
+    #When the action is too large, (use gamma to scale the action up to 10 times), we can observe a clear broke of stability
+    #The trajectory is plotted by the following function.
+    plot_F(17)

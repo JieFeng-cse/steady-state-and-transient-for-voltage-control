@@ -46,9 +46,7 @@ if args.env_name == '123bus':
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
     env = IEEE123bus(pp_net, injection_bus)
     num_agent = 14
-    # Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
     Q_limit = np.asarray([[-21.6,21.6],[-18,18],[-21.6,21.6],[-10.8,10.8],[-9.45,9.45],[-20,20],[-20,20],[-16,16],[-4.725,4.725],[-7.2,7.2],[-7.2,7.2],[-6.75,6.75],[-6.75,6.75],[-5.4,5.4]])
-    # C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
     C = np.asarray([0.2,0.25,0.1,0.3,0.3,0.2,0.2,0.3,0.9,0.7,0.7,0.7,0.6,0.7])*0.02
     if args.safe_method == 'project':
         alpha = 1
@@ -159,8 +157,6 @@ def plot_traj_123(seed):
         last_action = np.copy(action)
         state = next_state
     
-    # lb = axs[0].plot(range(len(action_list)), [0.95]*len(action_list), linestyle='--', dashes=(5, 10), color='g', label='lower bound')
-    # ub = axs[0].plot(range(len(action_list)), [1.05]*len(action_list), linestyle='--', dashes=(5, 10), color='r', label='upper bound')
     for idx,i in enumerate([2,8]):    #[2,5,8]
         dps = axs[0].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-.', label = r'$\alpha=0.5$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
         dpa = axs[1].plot(range(len(action_list)), np.array(action_list)[:,i], '-.', label = r'$\alpha=0.5$'+f' at bus {injection_bus[i]+1}', linewidth=2,color=color_set[idx])
@@ -177,9 +173,7 @@ def plot_traj_123(seed):
         action = []
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
-            action_agent = alpha8_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])#+np.random.normal(0, 0.05)
-            # action_agent = (np.maximum(state[i]-1.05, 0)-np.maximum(0.95-state[i], 0)).reshape((1,))*2
-            # action_agent = np.clip(action_agent, -max_ac, max_ac)
+            action_agent = alpha8_list[i].policy_net.get_action(np.asarray([state[i]]),last_action[i])
             action.append(action_agent)
 
         # PI policy    
@@ -197,18 +191,9 @@ def plot_traj_123(seed):
 
     
     matplotlib.rcParams['text.usetex']=True
-    axs[0].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*1.05, '--',linewidth=2,color='dimgray')  #,label=r'$\bar{v}$'
-    # axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-21.6), ':',linewidth=2,label=r'$\underline{q}$'+f' at bus {injection_bus[2]+1}',color=color_set[4]) 
-    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-4.75), '--',linewidth=2,color='dimgray') #,label=r'$\underline{q}$'+f' at bus {injection_bus[8]+1}'
-    # leg1 = plt.legend(safe_a_plt, safe_name, loc='lower left')
-    # axs[0].legend(loc='lower left', prop={"size":20})
-    # axs[1].legend(loc='lower left', prop={"size":20})
-    # box = axs[0].get_position()
-    # axs[0].set_position([box.x0-0.05*box.width, box.y0+0.09*box.height,
-    #                 box.width* 0.9, box.height*0.9])
-    # box = axs[1].get_position()
-    # axs[1].set_position([box.x0+0.05*box.width, box.y0+0.09*box.height,
-    #                 box.width* 0.9, box.height*0.9])
+    axs[0].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*1.05, '--',linewidth=2,color='dimgray')  
+    axs[1].plot(range(len(action_list)),np.ones_like(np.array(state_list)[:len(action_list),0])*(-4.75), '--',linewidth=2,color='dimgray') 
+    
     box = axs[0].get_position()
     axs[0].set_position([box.x0-0.05*box.width, box.y0+0.4*box.height,
                     box.width* 0.95, box.height*0.7])
@@ -217,15 +202,11 @@ def plot_traj_123(seed):
                     box.width* 0.95, box.height*0.7])
     axs[0].legend(loc='lower center', bbox_to_anchor=(1.2, -0.7),
         fancybox=True, ncol=3, prop={"size":15})
-    # axs[0].legend(loc='right', bbox_to_anchor=(3.05, 0.4),
-    #     fancybox=True, shadow=True, ncol=1,prop={"size":13})
-    # axs[0].legend(loc='upper right', prop={"size":13})
-    # axs[1].legend(loc='upper right', prop={"size":13})
+    
     axs[0].set_xlabel('Iteration Steps')   
     axs[1].set_xlabel('Iteration Steps')  
     axs[0].set_ylabel('Bus Voltage [p.u.]')   
     axs[1].set_ylabel('q Injection [MVar]')  
-    # axs[0].set_title(f'{seed}')
     plt.savefig('alpha.png')
 
 if __name__ == "__main__":

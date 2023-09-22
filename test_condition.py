@@ -1,3 +1,5 @@
+# This code is written to validate the stability property of the controller
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
@@ -108,8 +110,7 @@ for i in range(1000):
             print(np.min(eig_v))
         svdvA = svdvals(C@XX_inv+np.eye(12))
         svdvK = svdvals(np.diag(K)@np.diag(K))
-        # if np.min(svdvA)<np.max(svdvK):
-        #     print('harsh condition violated')
+
             
         action = last_action + np.asarray(action)
         next_state, reward, reward_sep, done = env.step_Preward(action, (action-last_action))

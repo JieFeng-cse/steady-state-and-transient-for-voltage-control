@@ -21,13 +21,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import argparse
 
-from environment_single_phase import create_56bus, VoltageCtrl_nonlinear
 from env_single_phase_13bus import IEEE13bus, create_13bus
 from env_single_phase_123bus import IEEE123bus, create_123bus
-from env_three_phase_eu import Three_Phase_EU, create_eu_lv
-from IEEE_13_3p import IEEE13bus3p, create_13bus3p
-from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, ReplayBuffer, ReplayBufferPI, PolicyNetwork, SafePolicy3phase, LinearPolicy
-from ICNN import ICNN,convex_monotone_network
+
+from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, ReplayBuffer, ReplayBufferPI, PolicyNetwork, LinearPolicy
+
 
 use_cuda = torch.cuda.is_available()
 device   = torch.device("cuda" if use_cuda else "cpu")
@@ -53,20 +51,12 @@ plr = 1e-4
 ph_num = 1
 max_ac = 0.3
 alpha = 0.2
-if args.env_name == '56bus':
-    pp_net = create_56bus()
-    injection_bus = np.array([18, 21, 30, 45, 53])-1  
-    env = VoltageCtrl_nonlinear(pp_net, injection_bus)
-    num_agent = 5
 
 if args.env_name == '13bus':
     pp_net = create_13bus()
     injection_bus = np.array([2, 7, 9])
-    # injection_bus = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
     env = IEEE13bus(pp_net, injection_bus)
     num_agent = len(injection_bus)
-    # Q_limit = np.asarray([[-1.0,1.0],[-1.0,0.8],[-1.0,0.6]])
-    # C = np.asarray([0.7,0.5,0.6])*0.15    
     Q_limit = np.asarray([[-1.5,1.5],[-1.4,1.4],[-1.0,1.0]])
     C = np.asarray([0.7,0.5,0.6])*0.15
 
@@ -76,25 +66,10 @@ if args.env_name == '123bus':
     injection_bus = np.array([10, 11, 16, 20, 33, 36, 48, 59, 66, 75, 83, 92, 104, 61])-1
     env = IEEE123bus(pp_net, injection_bus)
     num_agent = 14
-    # Q_limit = np.asarray([[-15,15],[-10,10],[-13,13],[-7,7],[-6,6],[-3.5,3.5],[-7,7],[-2.5,2.5],[-3,3],[-4.5,4.5],[-1.5,1.5],[-3,3],[-2.4,2.4],[-1.2,1.2]])
-    # C = np.asarray([0.1,0.2,0.3,0.3,0.5,0.7,1.0,0.7,1.0,1.0,1.0,1.0,0.5,0.7])*0.025
     Q_limit = np.asarray([[-21.6,21.6],[-18,18],[-21.6,21.6],[-10.8,10.8],[-9.45,9.45],[-20,20],[-20,20],[-16,16],[-4.725,4.725],[-7.2,7.2],[-7.2,7.2],[-6.75,6.75],[-6.75,6.75],[-5.4,5.4]])
     C = np.asarray([0.2,0.25,0.1,0.3,0.3,0.2,0.2,0.3,0.9,0.7,0.7,0.7,0.6,0.7])*0.02
     if args.algorithm == 'safe-ddpg':
         plr = 1.5e-4
-
-if args.env_name == '13bus3p':
-    # injection_bus = np.array([675,633,680])
-    injection_bus = np.array([633,634,671,645,646,692,675,611,652,632,680,684])
-    pp_net, injection_bus_dict = create_13bus3p(injection_bus) 
-    max_ac = 0.5
-    env = IEEE13bus3p(pp_net,injection_bus_dict)
-    num_agent = len(injection_bus)
-    ph_num=3
-    if args.algorithm == 'safe-ddpg':
-        plr = 1e-4
-    if args.algorithm == 'ddpg':
-        plr = 5e-5
 
 
 
@@ -193,22 +168,6 @@ if (FLAG ==0):
         agent_list[i].policy_net.load_state_dict(policynet_dict)
 
 elif (FLAG ==1):
-    # training episode
-    # for i in range(num_agent):
-    #     if ph_num == 3 and args.algorithm=='safe-ddpg':
-    #         valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type} copy/value_net_checkpoint_a{i}.pth')
-    #         policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm}/{args.safe_type} copy/policy_net_checkpoint_a{i}.pth')
-    #     else:
-    #         valuenet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm} copy/value_net_checkpoint_a{i}.pth')
-    #         policynet_dict = torch.load(f'checkpoints/{type_name}/{args.env_name}/{args.algorithm} copy/policy_net_checkpoint_a{i}.pth')
-    #     agent_list[i].value_net.load_state_dict(valuenet_dict)
-    #     agent_list[i].policy_net.load_state_dict(policynet_dict) 
-    #     for target_param, param in zip(agent_list[i].target_value_net.parameters(), agent_list[i].value_net.parameters()):
-    #         target_param.data.copy_(param.data)
-
-    #     for target_param, param in zip(agent_list[i].target_policy_net.parameters(), agent_list[i].policy_net.parameters()):
-    #         target_param.data.copy_(param.data)
-
     if args.algorithm == 'safe-ddpg':
         num_episodes = 800    #13-3p
         # num_episodes = 700
@@ -408,14 +367,12 @@ for step in range(100):
 fig, axs = plt.subplots(1, num_agent+1, figsize=(15,3))
 for i in range(num_agent):
     axs[i].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], '-.', label = 'states')
-    # axs[i].plot(range(len(action_list)), np.array(action_list)[:,i], label = 'action')
     axs[i].legend(loc='lower left')
 fig1, axs1 = plt.subplots(1, num_agent+1, figsize=(15,3))
 for i in range(num_agent):
     axs1[i].plot(range(len(action_list)), np.array(action_list)[:len(action_list),i], '-.', label = 'actions')
-    # axs[i].plot(range(len(action_list)), np.array(action_list)[:,i], label = 'action')
     axs1[i].legend(loc='lower left')
 axs[num_agent].plot(range(len(reward_list)),reward_list)
 plt.show()
 
-# test success rate:
+

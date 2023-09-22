@@ -58,77 +58,9 @@ class DDPG:
  
         self.value_optimizer.step()
         
-        # linear_action = (torch.maximum(state-1.03,torch.zeros_like(state))-torch.maximum(0.97-state,torch.zeros_like(state)))*1
-        # print(self.policy_net(state))
-        # exit(0)
-        # policy_loss = self.value_criterion(self.policy_net(state),linear_action)
+        
         policy_loss = self.value_net(state, last_action+self.policy_net(state,last_action)) 
         policy_loss =  -policy_loss.mean()
-        # policy_loss =  self.value_criterion(self.policy_net(state),linear_action)
-        
-        self.policy_optimizer.zero_grad()
-        policy_loss.backward()
-        self.policy_optimizer.step()
-
-        for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
-            target_param.data.copy_(
-                target_param.data * (1.0 - soft_tau) + param.data*soft_tau
-            )
-
-        for target_param, param in zip(self.target_policy_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(
-                target_param.data * (1.0 - soft_tau) + param.data * soft_tau
-            )
-    def train_step_3ph(self, replay_buffer, batch_size,
-                   gamma=0.99,
-                   soft_tau=1e-2):
-
-        state, action, last_action, reward, next_state, done = replay_buffer.sample(batch_size)
-
-        state = torch.FloatTensor(state).to(self.device)
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        action = torch.FloatTensor(action).to(self.device)
-        last_action = torch.FloatTensor(last_action).to(self.device)
-        reward = torch.FloatTensor(reward).unsqueeze(1).to(self.device)
-        done = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
-
-        next_action = action-self.target_policy_net(next_state)    
-        target_value = self.target_value_net(next_state, next_action.detach())
-        expected_value = reward + gamma*(1.0-done)*target_value
-        
-        value = self.value_net(state, action)
-        value_loss = self.value_criterion(value, expected_value.detach())
-        
-        self.value_optimizer.zero_grad()
-        value_loss.backward()
- 
-        self.value_optimizer.step()
-
-        jacob_list = []
-        
-        for i in range(state.shape[0]):
-            x = state[i]
-            x.requires_grad = True
-            action_jb = self.policy_net(x)
-            jacob = torch.zeros(state.shape[1], state.shape[1]) 
-            for j in range(3):
-                output = torch.zeros(state.shape[1]).to(self.device)
-                output[j]=1
-                jacob[j,:]=torch.autograd.grad(action_jb, x, grad_outputs=output, retain_graph=True)[0]    
-            jacob_list.append(jacob.unsqueeze(0))
-        jacob_list = torch.cat(jacob_list,0).to(self.device)          
-        # print(torch.mean(jacob_list,dim=0))                                                                          
-        jacob_ii = -torch.sum(jacob_list[:,0,0]+jacob_list[:,1,1]+jacob_list[:,2,2])
-        jacob_dif = 0.
-        for i in range(3):
-            for j in range(3):
-                if  i==j:
-                    jacob_dif -= torch.sum(torch.abs(jacob_list[:,i,j]))
-                else:
-                    jacob_dif += torch.sum(torch.abs(jacob_list[:,i,j]))
-        
-        policy_loss = self.value_net(state, last_action-self.policy_net(state)) 
-        policy_loss = -policy_loss.mean()+ torch.norm(self.policy_net(torch.ones_like(state)),2) + 0.05*torch.exp(jacob_ii) + 0.05*torch.exp(jacob_dif)
         
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
@@ -192,7 +124,7 @@ class SafePolicyNetwork(nn.Module):
         self.q = torch.nn.Parameter(torch.rand(action_dim, self.hidden_dim), requires_grad=True)
         self.z = torch.nn.Parameter(torch.rand(action_dim, self.hidden_dim), requires_grad=True)
         
-    def forward(self, state, last_action):
+    def forward(self, state, last_action, gamma=1):
         self.w_plus=torch.matmul(torch.square(self.q), self.w_recover)
         
         self.w_minus=torch.matmul(-torch.square(self.q), self.w_recover)
@@ -213,11 +145,11 @@ class SafePolicyNetwork(nn.Module):
         
         self.nonlinear_plus = torch.matmul(F.relu(torch.matmul(state, self.select_w)
                                                   + self.b_plus.view(1, self.hidden_dim)),
-                                           torch.transpose(self.w_plus, 0, 1))
+                                           torch.transpose(self.w_plus, 0, 1))*gamma
         
         self.nonlinear_minus = torch.matmul(F.relu(torch.matmul(state, self.select_wneg)
                                                    + self.b_minus.view(1, self.hidden_dim)),
-                                            torch.transpose(self.w_minus, 0, 1))
+                                            torch.transpose(self.w_minus, 0, 1))*gamma
         if self.use_gradient:
             # for high voltage scenario, the reactive power injection is negative
             x_high_voltage  = torch.tanh(self.nonlinear_plus)*\
@@ -240,65 +172,22 @@ class SafePolicyNetwork(nn.Module):
         if not self.use_gradient:
             gradient = 0
 
-        x = x_high_voltage + x_low_voltage
-        # tmp = x.clone()
-        # if gradient*x>0:
-        #     x=0
+        x = x_high_voltage + x_low_voltage  
         x -= gradient
-        # if torch.abs(gradient)>0.2:
-        #     print('gradient is too large')
-        #     exit(0)
+
         if self.use_gradient:
             x = self.safe_flow(x,last_action)
-        return x #, tmp
+        return x 
     
     def safe_flow(self, action,last_Q):
         action=torch.maximum(self.alpha*(self.lower_bound_Q-last_Q),action)
         action=torch.minimum(self.alpha*(self.upper_bound_Q-last_Q),action)
         return action
 
-    def get_action(self, state, last_action):
+    def get_action(self, state, last_action,gamma=1):
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         last_action = torch.FloatTensor(last_action).unsqueeze(0).to(self.device)
-        action = self.forward(state, last_action) #pi
-        return action.detach().cpu().numpy()[0]#, pi.detach().cpu().numpy()[0]
-
-
-
-class SafePolicy3phase(nn.Module):
-    def __init__(self, env, obs_dim, action_dim, hidden_dim, bus_id, scale = 0.15, init_w=3e-3):
-        super(SafePolicy3phase,self).__init__()
-        use_cuda = torch.cuda.is_available()
-        self.env = env
-        self.bus_id = bus_id
-        self.device   = torch.device("cuda" if use_cuda else "cpu")
-        self.action_dim = action_dim
-        action_dim_per_phase=1
-        for phase in env.injection_bus[bus_id]:
-            if phase == 'a':
-                self.policy_a = SafePolicyNetwork(env, obs_dim, action_dim_per_phase, hidden_dim, scale = 0.15, init_w=3e-3)
-            if phase == 'b':
-                self.policy_b = SafePolicyNetwork(env, obs_dim, action_dim_per_phase, hidden_dim, scale = 0.15, init_w=3e-3)
-            if phase == 'c':
-                self.policy_c = SafePolicyNetwork(env, obs_dim, action_dim_per_phase, hidden_dim, scale = 0.15, init_w=3e-3)
-    def forward(self, state):
-        action_list = []
-        for i,phase in enumerate(self.env.injection_bus[self.bus_id]):
-            if phase == 'a':
-                action = self.policy_a(state[:,i].unsqueeze(-1))
-                action_list.append(action)
-            if phase == 'b':
-                action = self.policy_b(state[:,i].unsqueeze(-1))
-                action_list.append(action)
-            if phase == 'c':
-                action = self.policy_c(state[:,i].unsqueeze(-1))
-                action_list.append(action)
-        action = torch.cat(action_list,dim=1)
-        action += (torch.maximum(state-1.03, torch.zeros_like(state).to(self.device))-torch.maximum(0.97-state,  torch.zeros_like(state).to(self.device)))*0.01
-        return action
-    def get_action(self, state):
-        state = torch.FloatTensor(state).to(self.device)
-        action = self.forward(state)
+        action = self.forward(state, last_action,gamma) 
         return action.detach().cpu().numpy()[0]
 
 
